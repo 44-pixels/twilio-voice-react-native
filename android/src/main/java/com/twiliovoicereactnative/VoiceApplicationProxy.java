@@ -28,8 +28,9 @@ public class VoiceApplicationProxy {
   private final ServiceConnection voiceServiceObserver = new ServiceConnection() {
     @Override
     public void onServiceConnected(ComponentName name, IBinder service) {
-      if (name.getClassName().equals(VoiceService.class.getName()))
-        voiceServiceApi = (VoiceService.VoiceServiceAPI)service;
+      // >>> FORK KAR-295 — see VoiceServiceBinding.java
+      voiceServiceApi = VoiceServiceBinding.bind(name, service);
+      // <<< FORK
     }
     @Override
     public void onServiceDisconnected(ComponentName name) {
