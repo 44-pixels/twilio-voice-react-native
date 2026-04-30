@@ -1,6 +1,6 @@
 # 44-pixels fork
 
-Fork of `twilio/twilio-voice-react-native`. Consumed by Karen via `github:` install.
+Fork of `twilio/twilio-voice-react-native`. Consumed via `github:` install.
 
 ## Branches & tags
 

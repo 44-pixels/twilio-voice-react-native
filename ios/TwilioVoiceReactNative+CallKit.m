@@ -10,6 +10,9 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
+// >>> FORK KAR-287 — see TwilioVoiceReactNative+Handle.m
+#import "TwilioVoiceReactNative+Handle.h"
+// <<< FORK
 
 NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native";
 
@@ -92,16 +95,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
         }
     }
 
-    CXHandle *callHandle = [[CXHandle alloc] initWithType:CXHandleTypeGeneric value:handleName];
-
-    CXCallUpdate *callUpdate = [[CXCallUpdate alloc] init];
-    callUpdate.remoteHandle = callHandle;
-    callUpdate.localizedCallerName = handleName;
-    callUpdate.supportsDTMF = YES;
-    callUpdate.supportsHolding = YES;
-    callUpdate.supportsGrouping = NO;
-    callUpdate.supportsUngrouping = NO;
-    callUpdate.hasVideo = NO;
+    // >>> FORK KAR-287 — see TwilioVoiceReactNative+Handle.m
+    CXCallUpdate *callUpdate = [self fork_callUpdateForHandleName:handleName];
+    // <<< FORK
 
     [self.callKitProvider reportNewIncomingCallWithUUID:callInvite.uuid update:callUpdate completion:^(NSError *error) {
         if (!error) {
