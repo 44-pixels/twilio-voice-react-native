@@ -299,18 +299,30 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)provider:(CXProvider *)provider performAnswerCallAction:(CXAnswerCallAction *)action {
+    // >>> FORK KAR-310 — fail action if invite already cancelled (answer-after-cancel race)
+    if (!self.callInviteMap[action.callUUID.UUIDString]) { [action fail]; return; }
+    // <<< FORK
     [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
     [TwilioVoiceReactNative twilioAudioDevice].block();
-    
+
+    // >>> FORK KAR-310 — capture failure to propagate to CXAction.
+    // Assumes upstream completion is invoked synchronously; verify on SDK bump.
+    __block BOOL forkAnswerFailed = NO;
+    // <<< FORK
     [self performAnswerVoiceCallWithUUID:action.callUUID completion:^(BOOL success) {
         if (success) {
             NSLog(@"performAnswerVoiceCallWithUUID successful");
         } else {
             NSLog(@"performAnswerVoiceCallWithUUID failed");
+            // >>> FORK KAR-310
+            forkAnswerFailed = YES;
+            // <<< FORK
         }
     }];
-        
-    [action fulfill];
+
+    // >>> FORK KAR-310 — was: [action fulfill];
+    if (forkAnswerFailed) { [action fail]; } else { [action fulfill]; }
+    // <<< FORK
 }
 
 - (void)provider:(CXProvider *)provider performSetHeldCallAction:(CXSetHeldCallAction *)action {

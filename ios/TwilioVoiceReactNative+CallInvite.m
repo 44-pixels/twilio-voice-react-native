@@ -9,6 +9,9 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
+// >>> FORK KAR-310 — see TwilioVoiceReactNative+Handle.m
+#import "TwilioVoiceReactNative+Handle.h"
+// <<< FORK
 
 @interface TwilioVoiceReactNative (CallInvite) <TVONotificationDelegate>
 
@@ -49,8 +52,10 @@
                            kTwilioVoiceReactNativeVoiceErrorKeyMessage: [error localizedDescription]}}];
     
     [self.callInviteMap removeObjectForKey:uuid];
-    
-    [self endCallWithUuid:[[NSUUID alloc] initWithUUIDString:uuid]];
+
+    // >>> FORK KAR-310 — see TwilioVoiceReactNative+Handle.m
+    [self fork_dismissIncomingCallUI:[[NSUUID alloc] initWithUUIDString:uuid]];
+    // <<< FORK
 }
 
 @end
