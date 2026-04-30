@@ -8,7 +8,20 @@ Fork of `twilio/twilio-voice-react-native`. Consumed by Karen via `github:` inst
 - `fork/<upstream-version>` = upstream tag + our patches. One branch per upstream version we ship.
 - Tag `<upstream-version>-fork.<N>` on every patch-set change. Consumers pin tags, never branches.
 
-New upstream version → branch off the tag, cherry-pick patches forward, tag.
+New upstream version → branch off the tag, cherry-pick patches forward, tag:
+
+```bash
+git fetch upstream --tags
+git checkout -b fork/<new-version> <new-version>
+git cherry-pick <prev-version>..fork/<prev-version>
+# resolve conflicts — sentinels mark every hook site
+git tag <new-version>-fork.1
+git push -u origin fork/<new-version> --tags
+```
+
+For each conflict: if upstream merged our fix, drop the commit + delete the fork-only file (note upstream SHA in message). Otherwise re-attach the hook in the new shape, and check each fork-only file's `Re-check on SDK bump` header.
+
+Old `fork/<version>` branches stay frozen — never rebase or delete.
 
 ## Patch rules
 
