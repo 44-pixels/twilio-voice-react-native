@@ -13,6 +13,9 @@
 // >>> FORK KAR-287 — see TwilioVoiceReactNative+Handle.m
 #import "TwilioVoiceReactNative+Handle.h"
 // <<< FORK
+// >>> FORK KAR-310 — see TwilioVoiceReactNative+SafeAnswer.m
+#import "TwilioVoiceReactNative+SafeAnswer.h"
+// <<< FORK
 
 NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native";
 
@@ -286,18 +289,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)provider:(CXProvider *)provider performAnswerCallAction:(CXAnswerCallAction *)action {
-    [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
-    [TwilioVoiceReactNative twilioAudioDevice].block();
-    
-    [self performAnswerVoiceCallWithUUID:action.callUUID completion:^(BOOL success) {
-        if (success) {
-            NSLog(@"performAnswerVoiceCallWithUUID successful");
-        } else {
-            NSLog(@"performAnswerVoiceCallWithUUID failed");
-        }
-    }];
-        
-    [action fulfill];
+    // >>> FORK KAR-310 — see TwilioVoiceReactNative+SafeAnswer.m
+    [self fork_performAnswerCallAction:action];
+    // <<< FORK
 }
 
 - (void)provider:(CXProvider *)provider performSetHeldCallAction:(CXSetHeldCallAction *)action {
