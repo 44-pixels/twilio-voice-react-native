@@ -167,6 +167,7 @@ public class VoiceService extends Service {
     }
   }
   private void incomingCall(final CallRecordDatabase.CallRecord callRecord) {
+    if (null == callRecord) { logger.warning("incomingCall: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("incomingCall: " + callRecord.getUuid());
 
     // verify that mic permissions have been granted and if not, throw a error
@@ -204,6 +205,7 @@ public class VoiceService extends Service {
         new Pair<>(JS_EVENT_KEY_CALL_INVITE_INFO, serializeCallInvite(callRecord))));
   }
   private void acceptCall(final CallRecordDatabase.CallRecord callRecord) {
+    if (null == callRecord) { logger.warning("acceptCall: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("acceptCall: " + callRecord.getUuid());
 
     // verify that mic permissions have been granted and if not, throw a error
@@ -260,6 +262,7 @@ public class VoiceService extends Service {
         new Pair<>(JS_EVENT_KEY_CALL_INVITE_INFO, serializeCallInvite(callRecord))));
   }
   private void rejectCall(final CallRecordDatabase.CallRecord callRecord) {
+    if (null == callRecord) { logger.warning("rejectCall: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("rejectCall: " + callRecord.getUuid());
 
     // remove call record
@@ -290,6 +293,7 @@ public class VoiceService extends Service {
         new Pair<>(JS_EVENT_KEY_CALL_INVITE_INFO, serializeCallInvite(callRecord))));
   }
   private void cancelCall(final CallRecordDatabase.CallRecord callRecord) {
+    if (null == callRecord) { logger.warning("cancelCall: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("CancelCall: " + callRecord.getUuid());
 
     // take down notification
@@ -309,6 +313,7 @@ public class VoiceService extends Service {
         new Pair<>(VoiceErrorKeyError, serializeCallException(callRecord))));
   }
   private void raiseOutgoingCallNotification(final CallRecordDatabase.CallRecord callRecord) {
+    if (null == callRecord) { logger.warning("raiseOutgoingCallNotification: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("raiseOutgoingCallNotification: " + callRecord.getUuid());
 
     // put up outgoing call notification
@@ -319,6 +324,7 @@ public class VoiceService extends Service {
     createOrReplaceForegroundNotification(callRecord.getNotificationId(), notification);
   }
   private void foregroundAndDeprioritizeIncomingCallNotification(final CallRecordDatabase.CallRecord callRecord) {
+    if (null == callRecord) { logger.warning("foregroundAndDeprioritizeIncomingCallNotification: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("foregroundAndDeprioritizeIncomingCallNotification: " + callRecord.getUuid());
 
     // cancel existing notification & put up in call
@@ -387,7 +393,10 @@ public class VoiceService extends Service {
     return (UUID)intent.getSerializableExtra(Constants.MSG_KEY_UUID);
   }
   private static CallRecordDatabase.CallRecord getCallRecord(final UUID uuid) {
-    return Objects.requireNonNull(getCallRecordDatabase().get(new CallRecordDatabase.CallRecord(uuid)));
+    // >>> FORK KAR-316 (Sentry KAREN-APP-58) — see ForkCallRecordLookup
+    // Re-check on SDK bump: whether upstream still requireNonNull's the lookup.
+    return ForkCallRecordLookup.getOrNull(uuid);
+    // <<< FORK
   }
   private static void sendJSEvent(@NonNull String scope, @NonNull WritableMap event) {
     getJSEventEmitter().sendEvent(scope, event);
