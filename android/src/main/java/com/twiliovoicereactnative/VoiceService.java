@@ -194,8 +194,9 @@ public class VoiceService extends Service {
 
 
     // play ringer sound
-    VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().activate();
+    // >>> FORK KAR-373 — defer audioSwitch.activate() to acceptCall so MODE_IN_COMMUNICATION isn't set during ring
     VoiceApplicationProxy.getMediaPlayerManager().play(MediaPlayerManager.SoundTable.INCOMING);
+    // <<< FORK
 
     // trigger JS layer
     sendJSEvent(
@@ -234,6 +235,10 @@ public class VoiceService extends Service {
 
     // stop ringer sound
     VoiceApplicationProxy.getMediaPlayerManager().stop();
+
+    // >>> FORK KAR-373 — activate audio path now that conversation begins (deferred from incomingCall)
+    VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().activate();
+    // <<< FORK
 
     // accept call
     AcceptOptions acceptOptions = new AcceptOptions.Builder()
