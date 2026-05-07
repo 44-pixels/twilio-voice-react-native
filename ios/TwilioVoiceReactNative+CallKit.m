@@ -10,9 +10,6 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
-// >>> FORK KAR-287 — see ForkE164.h
-#import "ForkE164.h"
-// <<< FORK
 
 NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native";
 
@@ -95,17 +92,11 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
         }
     }
 
-    // >>> FORK KAR-287 — was: initWithType:CXHandleTypeGeneric
-    BOOL forkIsE164 = ForkIsE164PhoneNumber(handleName);
-    CXHandleType forkHandleType = forkIsE164 ? CXHandleTypePhoneNumber : CXHandleTypeGeneric;
-    // <<< FORK
-    CXHandle *callHandle = [[CXHandle alloc] initWithType:forkHandleType value:handleName];
+    CXHandle *callHandle = [[CXHandle alloc] initWithType:CXHandleTypeGeneric value:handleName];
 
     CXCallUpdate *callUpdate = [[CXCallUpdate alloc] init];
     callUpdate.remoteHandle = callHandle;
-    // >>> FORK KAR-287 — was: callUpdate.localizedCallerName = handleName;
-    if (!forkIsE164) callUpdate.localizedCallerName = handleName;
-    // <<< FORK
+    callUpdate.localizedCallerName = handleName;
     callUpdate.supportsDTMF = YES;
     callUpdate.supportsHolding = YES;
     callUpdate.supportsGrouping = NO;
