@@ -10,6 +10,9 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
+// >>> FORK KAR-381 — see ForkE164.h
+#import "ForkE164.h"
+// <<< FORK
 
 NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native";
 
@@ -92,11 +95,23 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
         }
     }
 
-    CXHandle *callHandle = [[CXHandle alloc] initWithType:CXHandleTypeGeneric value:handleName];
+    // >>> FORK KAR-381 — see ForkE164.h
+    // If the template result is E.164 → use it as PhoneNumber handle (Contacts lookup runs).
+    // Else (template gave a name like "Dave") → fall back to callInvite.from for the handle
+    // when it's E.164, and surface the name via localizedCallerName as Contacts-miss fallback.
+    BOOL forkHandleIsE164 = ForkIsE164PhoneNumber(handleName);
+    NSString *forkPhoneFallback = callInvite.from;
+    BOOL forkFallbackIsE164 = !forkHandleIsE164 && ForkIsE164PhoneNumber(forkPhoneFallback);
+    CXHandleType forkHandleType = (forkHandleIsE164 || forkFallbackIsE164) ? CXHandleTypePhoneNumber : CXHandleTypeGeneric;
+    NSString *forkHandleValue = forkHandleIsE164 ? handleName : (forkFallbackIsE164 ? forkPhoneFallback : handleName);
+    CXHandle *callHandle = [[CXHandle alloc] initWithType:forkHandleType value:forkHandleValue];
 
     CXCallUpdate *callUpdate = [[CXCallUpdate alloc] init];
     callUpdate.remoteHandle = callHandle;
-    callUpdate.localizedCallerName = handleName;
+    if (!forkHandleIsE164) {
+        callUpdate.localizedCallerName = handleName;
+    }
+    // <<< FORK
     callUpdate.supportsDTMF = YES;
     callUpdate.supportsHolding = YES;
     callUpdate.supportsGrouping = NO;
