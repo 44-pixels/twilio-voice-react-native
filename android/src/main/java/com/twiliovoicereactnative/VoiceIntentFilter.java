@@ -46,6 +46,7 @@ public final class VoiceIntentFilter {
       || Constants.ACTION_CANCEL_CALL.equals(action)
       || Constants.ACTION_CALL_DISCONNECT.equals(action)
       || Constants.ACTION_RAISE_OUTGOING_CALL_NOTIFICATION.equals(action)
-      || Constants.ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION.equals(action);
+      || Constants.ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION.equals(action)
+      || ForkFullScreenIncomingCall.ACTION.equals(action);
   }
 }

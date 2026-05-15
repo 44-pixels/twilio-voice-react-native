@@ -170,7 +170,9 @@ class NotificationUtility {
       .setCategory(Notification.CATEGORY_CALL)
       .setAutoCancel(true)
       .setContentIntent(piForegroundIntent)
-      .setFullScreenIntent(piForegroundIntent, true)
+      // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
+      .setFullScreenIntent(ForkFullScreenIncomingCall.pendingIntent(context, callRecord), true)
+      // <<< FORK
       .addPerson(incomingCaller)
       .setStyle(NotificationCompat.CallStyle.forIncomingCall(
         incomingCaller, piRejectIntent, piAcceptIntent))
@@ -311,8 +313,9 @@ class NotificationUtility {
     return voiceChannelId;
   }
 
-  private static PendingIntent constructPendingIntentForActivity(@NonNull Context context,
-                                                                 @NonNull final Intent intent) {
+  // Package-private so ForkFullScreenIncomingCall can reuse it. FORK KAR-443.
+  static PendingIntent constructPendingIntentForActivity(@NonNull Context context,
+                                                         @NonNull final Intent intent) {
     return PendingIntent.getActivity(
       context.getApplicationContext(),
       0,

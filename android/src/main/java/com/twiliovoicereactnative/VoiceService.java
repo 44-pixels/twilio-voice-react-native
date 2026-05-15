@@ -134,6 +134,13 @@ public class VoiceService extends Service {
           foregroundAndDeprioritizeIncomingCallNotification(
             getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
           break;
+        // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
+        case ForkFullScreenIncomingCall.ACTION:
+          ForkFullScreenIncomingCall.onLaunched(
+            VoiceService.this,
+            getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          break;
+        // <<< FORK
         case ACTION_PUSH_APP_TO_FOREGROUND:
           logger.warning("VoiceService received foreground request, ignoring");
           break;
