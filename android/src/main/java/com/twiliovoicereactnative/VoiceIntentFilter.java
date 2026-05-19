@@ -38,7 +38,10 @@ public final class VoiceIntentFilter {
     }
   }
 
-  private static boolean isVoiceAction(String action) {
+  // KAR-448: widened from private to package-private so ForkLockScreenFlags
+  // can reuse the same allow-list to decide when MainActivity is being
+  // launched to handle a call.
+  static boolean isVoiceAction(String action) {
     return Constants.ACTION_ACCEPT_CALL.equals(action)
       || Constants.ACTION_REJECT_CALL.equals(action)
       || Constants.ACTION_CANCEL_ACTIVE_CALL_NOTIFICATION.equals(action)

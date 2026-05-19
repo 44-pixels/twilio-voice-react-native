@@ -172,6 +172,9 @@ public class VoiceService extends Service {
     } else {
       logger.warning("No call record found");
     }
+    // >>> FORK KAR-448 — see ForkLockScreenFlags.java
+    ForkLockScreenFlags.clearForEndedCall();
+    // <<< FORK
   }
   private void incomingCall(final CallRecordDatabase.CallRecord callRecord) {
     if (null == callRecord) { logger.warning("incomingCall: no call record (KAR-316)"); return; } // FORK KAR-316
@@ -247,6 +250,10 @@ public class VoiceService extends Service {
     VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().activate();
     // <<< FORK
 
+    // >>> FORK KAR-448 — see ForkLockScreenFlags.java (foreground-accept path; intent-gated path in VoiceActivityProxy doesn't fire here)
+    ForkLockScreenFlags.applyForActiveCall();
+    // <<< FORK
+
     // accept call
     AcceptOptions acceptOptions = new AcceptOptions.Builder()
       .enableDscp(true)
@@ -291,6 +298,10 @@ public class VoiceService extends Service {
     callRecord.getCallInvite().reject(VoiceService.this);
     callRecord.setCallInviteUsedState();
 
+    // >>> FORK KAR-448 — see ForkLockScreenFlags.java
+    ForkLockScreenFlags.clearForEndedCall();
+    // <<< FORK
+
     // handle if event spawned from JS
     if (null != callRecord.getCallRejectedPromise()) {
       callRecord.getCallRejectedPromise().resolve(callRecord.getUuid().toString());
@@ -314,6 +325,10 @@ public class VoiceService extends Service {
     // stop ringer sound
     VoiceApplicationProxy.getMediaPlayerManager().stop();
     VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
+
+    // >>> FORK KAR-448 — see ForkLockScreenFlags.java
+    ForkLockScreenFlags.clearForEndedCall();
+    // <<< FORK
 
     // notify JS layer
     sendJSEvent(

@@ -14,6 +14,9 @@ class ExpoActivityLifecycleListener : ReactActivityLifecycleListener {
 
     override fun onCreate(activity: Activity?, savedInstanceState: Bundle?) {
         if (activity != null) {
+            // >>> FORK KAR-448 — see ForkLockScreenFlags.java
+            ForkLockScreenFlags.registerActivity(activity)
+            // <<< FORK
             voiceActivityProxy = VoiceActivityProxy(
                 activity
             ) { permission ->
@@ -56,6 +59,11 @@ class ExpoActivityLifecycleListener : ReactActivityLifecycleListener {
 
     override fun onDestroy(activity: Activity?) {
         voiceActivityProxy?.onDestroy()
+        // >>> FORK KAR-448 — see ForkLockScreenFlags.java
+        if (activity != null) {
+            ForkLockScreenFlags.unregisterActivity(activity)
+        }
+        // <<< FORK
 
         return super.onDestroy(activity)
     }

@@ -9,8 +9,6 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.view.Window;
-import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
@@ -38,11 +36,9 @@ public class VoiceActivityProxy {
     if (!checkPermissions()) {
       requestPermissions();
     }
-    // These flags ensure that the activity can be launched when the screen is locked.
-    Window window = context.getWindow();
-    window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-      | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-      | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    // >>> FORK KAR-448 — see ForkLockScreenFlags.java (replaces unconditional window.addFlags)
+    ForkLockScreenFlags.applyIfVoiceAction(context, context.getIntent());
+    // <<< FORK
     // handle any incoming intents
     handleIntent(context.getIntent());
   }
@@ -51,6 +47,9 @@ public class VoiceActivityProxy {
   }
   public void onNewIntent(Intent intent) {
     logger.debug("onNewIntent(...): invoked");
+    // >>> FORK KAR-448 — see ForkLockScreenFlags.java
+    ForkLockScreenFlags.applyIfVoiceAction(context, intent);
+    // <<< FORK
     handleIntent(intent);
   }
   private void requestPermissions() {
