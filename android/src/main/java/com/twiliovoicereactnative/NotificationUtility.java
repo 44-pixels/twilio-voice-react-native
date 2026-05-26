@@ -140,9 +140,14 @@ class NotificationUtility {
       NotificationResource.Type.INCOMING,
       callRecord);
 
-    final Person incomingCaller = new Person.Builder()
-      .setName(notificationResource.getName())
-      .build();
+    // >>> FORK KAR-479 — see ForkContactLookup.java
+    final ForkContactLookup.Result forkLookup = ForkContactLookup.resolveForIncoming(
+      context, notificationResource.getName(), callRecord.getCallInvite());
+    final Person.Builder forkPersonBuilder = new Person.Builder().setName(forkLookup.displayName);
+    if (forkLookup.icon != null) forkPersonBuilder.setIcon(forkLookup.icon);
+    if (forkLookup.telUri != null) forkPersonBuilder.setUri(forkLookup.telUri);
+    final Person incomingCaller = forkPersonBuilder.build();
+    // <<< FORK
 
     Intent foregroundIntent = constructMessage(
       context,
