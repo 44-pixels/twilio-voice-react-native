@@ -82,9 +82,9 @@ public final class ForkContactLookup {
    *   <li>No candidate, or {@code READ_CONTACTS} not granted → return the
    *       fallback name unchanged.</li>
    *   <li>{@link ContactsContract.PhoneLookup} miss → fallback name + tel URI.</li>
-   *   <li>Hit → contact name only when the fallback was the raw E.164 (i.e.
-   *       no user-supplied templated label to respect), plus optional photo
-   *       and tel URI.</li>
+   *   <li>Hit → contact display name (always wins over the template, so
+   *       address-book edits show up immediately), plus optional photo and
+   *       tel URI.</li>
    * </ol>
    */
   @NonNull
@@ -127,12 +127,10 @@ public final class ForkContactLookup {
       return new Result(fallbackName, null, telUri);
     }
 
-    // Replace the display name only when the fallback was the raw E.164 itself —
-    // otherwise the caller passed a deliberate templated label we must respect
-    // (parity with iOS where localizedCallerName preserves the template).
-    final String displayName = isE164(fallbackName) ? contactName : fallbackName;
+    // OS Contacts always wins on a hit — if the user edited their address
+    // book we want the new name to surface immediately, alongside the photo.
     final IconCompat icon = loadIcon(resolver, photoUri);
-    return new Result(displayName, icon, telUri);
+    return new Result(contactName, icon, telUri);
   }
 
   @Nullable
