@@ -25,6 +25,8 @@ Old `fork/<version>` branches stay frozen — never rebase or delete.
 
 ## Patch rules
 
+Fix the underlying issue whenever it is in our control. Do not silence, swallow, or downgrade errors just to avoid crashes. Only guard/absorb errors when the root cause is outside this fork's control (platform/OEM/upstream behavior), and document why in the fork-only file header.
+
 Keep upstream-file edits **minimal**: one-line hook, real logic in a fork-only file. If a patch can't be a one-line hook, extract more.
 
 Wrap every upstream-file edit in sentinels:

@@ -17,18 +17,27 @@ import com.twilio.voice.CancelledCallInvite;
 import com.twilio.voice.MessageListener;
 import com.twilio.voice.Voice;
 
-import java.util.Objects;
+import java.util.Map;
 import java.util.UUID;
 
 public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
   private static final SDKLog logger = new SDKLog(VoiceFirebaseMessagingService.class);
 
   public static class MessageHandler implements MessageListener  {
+    private final Map<String, String> payload;
+
+    public MessageHandler(@Nullable Map<String, String> payload) {
+      this.payload = payload;
+    }
+
     @Override
     public void onCallInvite(@NonNull CallInvite callInvite) {
       logger.log(String.format("onCallInvite %s", callInvite.getCallSid()));
 
       final CallRecord callRecord = new CallRecord(UUID.randomUUID(), callInvite);
+      // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
+      ForkInvitePayloadStore.remember(callInvite, payload);
+      // <<< FORK
 
       getCallRecordDatabase().add(callRecord);
       getVoiceServiceApi().incomingCall(callRecord);
@@ -39,8 +48,11 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
                                       @Nullable CallException callException) {
       logger.log(String.format("onCancelledCallInvite %s", cancelledCallInvite.getCallSid()));
 
-      CallRecord callRecord = Objects.requireNonNull(
-        getCallRecordDatabase().remove(new CallRecord(cancelledCallInvite.getCallSid())));
+      // >>> FORK KAR-492 — see ForkCancelledInviteCleanup.java
+      CallRecord callRecord = ForkCancelledInviteCleanup
+        .removeRecordOrCancelNotification(cancelledCallInvite);
+      if (callRecord == null) return;
+      // <<< FORK
 
       callRecord.setCancelledCallInvite(cancelledCallInvite);
       callRecord.setCallException(callException);
@@ -78,7 +90,7 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
       if (!Voice.handleMessage(
         this,
         remoteMessage.getData(),
-        new MessageHandler(),
+        new MessageHandler(remoteMessage.getData()),
         new CallMessageListenerProxy())) {
         logger.error("The message was not a valid Twilio Voice SDK payload: " +
           remoteMessage.getData());

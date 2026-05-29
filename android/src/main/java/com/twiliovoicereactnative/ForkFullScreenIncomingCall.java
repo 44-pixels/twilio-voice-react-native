@@ -31,9 +31,12 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
+import android.os.Build;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.app.ServiceCompat;
 
 import java.util.Objects;
 
@@ -53,6 +56,7 @@ public final class ForkFullScreenIncomingCall {
       ACTION,
       Objects.requireNonNull(VoiceApplicationProxy.getMainActivityClass()),
       callRecord.getUuid());
+    ForkNotificationIdentity.attachIncomingCall(intent, callRecord);
     return NotificationUtility.constructPendingIntentForActivity(context, intent);
   }
 
@@ -87,6 +91,34 @@ public final class ForkFullScreenIncomingCall {
       context,
       callRecord,
       Constants.VOICE_CHANNEL_HIGH_IMPORTANCE);
-    nm.notify(callRecord.getNotificationId(), notification);
+    if (context instanceof VoiceService) {
+      foregroundIncomingCall((VoiceService) context, callRecord.getNotificationId(), notification);
+    } else {
+      nm.notify(callRecord.getNotificationId(), notification);
+    }
+  }
+
+  private static void foregroundIncomingCall(@NonNull VoiceService service,
+                                             int notificationId,
+                                             @NonNull Notification notification) {
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        ServiceCompat.startForeground(
+          service,
+          notificationId,
+          notification,
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+      } else {
+        ServiceCompat.startForeground(service, notificationId, notification, 0);
+      }
+    } catch (RuntimeException e) {
+      logger.warning(e, "failed to foreground full-screen incoming call notification");
+      NotificationManager notificationManager = service.getSystemService(NotificationManager.class);
+      if (notificationManager == null) {
+        logger.warning("NotificationManager unavailable for full-screen incoming fallback");
+        return;
+      }
+      notificationManager.notify(notificationId, notification);
+    }
   }
 }

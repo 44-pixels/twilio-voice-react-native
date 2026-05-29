@@ -219,7 +219,9 @@ class VoiceModuleProxy {
       final boolean success = Voice.handleMessage(
         reactApplicationContext,
         eventData,
-        new VoiceFirebaseMessagingService.MessageHandler(),
+        // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
+        new VoiceFirebaseMessagingService.MessageHandler(eventData),
+        // <<< FORK
         new CallMessageListenerProxy()
       );
 

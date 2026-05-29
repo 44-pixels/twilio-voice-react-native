@@ -154,20 +154,33 @@ class NotificationUtility {
       Constants.ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION,
       Objects.requireNonNull(VoiceApplicationProxy.getMainActivityClass()),
       callRecord.getUuid());
+    // >>> FORK KAR-492 — see ForkNotificationIdentity.java
+    ForkNotificationIdentity.attachIncomingCall(foregroundIntent, callRecord);
+    // <<< FORK
     PendingIntent piForegroundIntent = constructPendingIntentForActivity(context, foregroundIntent);
 
     Intent rejectIntent = constructMessage(
       context,
       Constants.ACTION_REJECT_CALL,
-      VoiceService.class,
+      // >>> FORK KAR-492 — see ForkNotificationActionReceiver.java
+      ForkNotificationActionReceiver.class,
+      // <<< FORK
       callRecord.getUuid());
-    PendingIntent piRejectIntent = constructPendingIntentForService(context, rejectIntent);
+    // >>> FORK KAR-492 — see ForkNotificationIdentity.java
+    ForkNotificationIdentity.attachIncomingCall(rejectIntent, callRecord);
+    PendingIntent piRejectIntent = ForkNotificationActionReceiver.rejectPendingIntent(
+      context,
+      rejectIntent);
+    // <<< FORK
 
     Intent acceptIntent = constructMessage(
       context,
       Constants.ACTION_ACCEPT_CALL,
       Objects.requireNonNull(VoiceApplicationProxy.getMainActivityClass()),
       callRecord.getUuid());
+    // >>> FORK KAR-492 — see ForkNotificationIdentity.java
+    ForkNotificationIdentity.attachIncomingCall(acceptIntent, callRecord);
+    // <<< FORK
     PendingIntent piAcceptIntent = constructPendingIntentForActivity(context, acceptIntent);
 
     return constructNotificationBuilder(context, channelImportance)
@@ -323,7 +336,9 @@ class NotificationUtility {
                                                          @NonNull final Intent intent) {
     return PendingIntent.getActivity(
       context.getApplicationContext(),
-      0,
+      // >>> FORK KAR-492 — see ForkNotificationIdentity.java
+      ForkNotificationIdentity.pendingIntentRequestCode(intent),
+      // <<< FORK
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
   }
@@ -332,7 +347,9 @@ class NotificationUtility {
                                                                 @NonNull final Intent intent) {
     return PendingIntent.getService(
       context.getApplicationContext(),
-      0,
+      // >>> FORK KAR-492 — see ForkNotificationIdentity.java
+      ForkNotificationIdentity.pendingIntentRequestCode(intent),
+      // <<< FORK
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
   }

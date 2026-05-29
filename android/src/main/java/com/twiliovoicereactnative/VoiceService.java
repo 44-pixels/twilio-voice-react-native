@@ -58,11 +58,13 @@ import com.twilio.voice.Call;
 import com.twilio.voice.ConnectOptions;
 import com.twilio.voice.Voice;
 
+import java.lang.ref.WeakReference;
 import java.util.Objects;
 import java.util.UUID;
 
 public class VoiceService extends Service {
   private static final SDKLog logger = new SDKLog(VoiceService.class);
+  private static WeakReference<VoiceService> runningService = new WeakReference<>(null);
   public class VoiceServiceAPI extends Binder {
     public Call connect(@NonNull ConnectOptions cxnOptions,
                         @NonNull Call.Listener listener) {
@@ -99,46 +101,67 @@ public class VoiceService extends Service {
   }
 
   @Override
+  public void onCreate() {
+    super.onCreate();
+    runningService = new WeakReference<>(this);
+  }
+
+  @Override
+  public void onDestroy() {
+    VoiceService service = runningService.get();
+    if (service == this) {
+      runningService = new WeakReference<>(null);
+    }
+    super.onDestroy();
+  }
+
+  @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
     // apparently the system can recreate the service without sending it an intent so protect
     // against that case (GH-430).
     if (null != intent) {
-      switch (Objects.requireNonNull(intent.getAction())) {
+      // >>> FORK KAR-316 (Sentry KAREN-APP-58) — see ForkCallRecordLookup
+      final String action = intent.getAction();
+      if (action == null) {
+        logger.warning("VoiceService received intent with no action, ignoring");
+        return START_NOT_STICKY;
+      }
+      // <<< FORK
+      switch (action) {
         case ACTION_INCOMING_CALL:
-          incomingCall(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          incomingCall(getCallRecord(getMessageUUID(intent)));
           break;
         case ACTION_ACCEPT_CALL:
           try {
-            acceptCall(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+            acceptCall(getCallRecord(getMessageUUID(intent)));
           } catch (SecurityException e) {
             sendPermissionsError();
             logger.warning(e, "Cannot accept call, lacking necessary permissions");
           }
           break;
         case ACTION_REJECT_CALL:
-          rejectCall(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          rejectCall(getCallRecord(getMessageUUID(intent)), intent);
           break;
         case ACTION_CANCEL_CALL:
-          cancelCall(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          cancelCall(getCallRecord(getMessageUUID(intent)));
           break;
         case ACTION_CALL_DISCONNECT:
-          disconnect(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          disconnect(getCallRecord(getMessageUUID(intent)));
           break;
         case ACTION_RAISE_OUTGOING_CALL_NOTIFICATION:
-          raiseOutgoingCallNotification(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          raiseOutgoingCallNotification(getCallRecord(getMessageUUID(intent)));
           break;
         case ACTION_CANCEL_ACTIVE_CALL_NOTIFICATION:
-          cancelActiveCallNotification(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          cancelActiveCallNotification(getCallRecord(getMessageUUID(intent)));
           break;
         case ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION:
-          foregroundAndDeprioritizeIncomingCallNotification(
-            getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          foregroundAndDeprioritizeIncomingCallNotification(getCallRecord(getMessageUUID(intent)));
           break;
         // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
         case ForkFullScreenIncomingCall.ACTION:
           ForkFullScreenIncomingCall.onLaunched(
             VoiceService.this,
-            getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+            ForkCallRecordLookup.getForFullScreenLaunch(intent));
           break;
         // <<< FORK
         case ACTION_PUSH_APP_TO_FOREGROUND:
@@ -194,7 +217,9 @@ public class VoiceService extends Service {
     }
 
     // put up notification
-    callRecord.setNotificationId(NotificationUtility.createNotificationIdentifier());
+    // >>> FORK KAR-492 — see ForkNotificationIdentity.java
+    callRecord.setNotificationId(ForkNotificationIdentity.incomingNotificationId(callRecord));
+    // <<< FORK
     Notification notification = NotificationUtility.createIncomingCallNotification(
       VoiceService.this,
       callRecord,
@@ -266,6 +291,9 @@ public class VoiceService extends Service {
         acceptOptions,
         new CallListenerProxy(callRecord.getUuid(), VoiceService.this)));
     callRecord.setCallInviteUsedState();
+    // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
+    ForkInvitePayloadStore.clear(callRecord.getCallSid());
+    // <<< FORK
 
     // handle if event spawned from JS
     if (null != callRecord.getCallAcceptedPromise()) {
@@ -280,6 +308,17 @@ public class VoiceService extends Service {
         new Pair<>(CallInviteEventKeyCallSid, callRecord.getCallSid()),
         new Pair<>(JS_EVENT_KEY_CALL_INVITE_INFO, serializeCallInvite(callRecord))));
   }
+  private void rejectCall(final CallRecordDatabase.CallRecord callRecord,
+                          @NonNull final Intent intent) {
+    // >>> FORK KAR-492 — see ForkRejectCallAction.java
+    if (null == callRecord) {
+      removeForegroundNotification();
+      ForkRejectCallAction.rejectFromIntent(VoiceService.this, intent);
+      return;
+    }
+    // <<< FORK
+    rejectCall(callRecord);
+  }
   private void rejectCall(final CallRecordDatabase.CallRecord callRecord) {
     if (null == callRecord) { logger.warning("rejectCall: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("rejectCall: " + callRecord.getUuid());
@@ -288,6 +327,7 @@ public class VoiceService extends Service {
     getCallRecordDatabase().remove(callRecord);
 
     // take down notification
+    removeForegroundNotification();
     removeNotification(callRecord.getNotificationId());
 
     // stop ringer sound
@@ -297,6 +337,9 @@ public class VoiceService extends Service {
     // reject call
     callRecord.getCallInvite().reject(VoiceService.this);
     callRecord.setCallInviteUsedState();
+    // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
+    ForkInvitePayloadStore.clear(callRecord.getCallSid());
+    // <<< FORK
 
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java
     ForkLockScreenFlags.clearForEndedCall();
@@ -320,6 +363,7 @@ public class VoiceService extends Service {
     logger.debug("CancelCall: " + callRecord.getUuid());
 
     // take down notification
+    removeForegroundNotification();
     removeNotification(callRecord.getNotificationId());
 
     // stop ringer sound
@@ -328,6 +372,9 @@ public class VoiceService extends Service {
 
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java
     ForkLockScreenFlags.clearForEndedCall();
+    // <<< FORK
+    // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
+    ForkInvitePayloadStore.clear(callRecord.getCallSid());
     // <<< FORK
 
     // notify JS layer
@@ -400,6 +447,11 @@ public class VoiceService extends Service {
       (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     mNotificationManager.cancel(notificationId);
   }
+  static void removeForegroundNotificationIfRunning() {
+    VoiceService service = runningService.get();
+    if (service == null) return;
+    service.removeForegroundNotification();
+  }
   private void removeForegroundNotification() {
     logger.debug("removeForegroundNotification");
     ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
@@ -417,7 +469,9 @@ public class VoiceService extends Service {
     }
   }
   private static UUID getMessageUUID(@NonNull final Intent intent) {
-    return (UUID)intent.getSerializableExtra(Constants.MSG_KEY_UUID);
+    // >>> FORK KAR-316 (Sentry KAREN-APP-58) — see ForkCallRecordLookup
+    return ForkCallRecordLookup.readUuid(intent);
+    // <<< FORK
   }
   private static CallRecordDatabase.CallRecord getCallRecord(final UUID uuid) {
     // >>> FORK KAR-316 (Sentry KAREN-APP-58) — see ForkCallRecordLookup

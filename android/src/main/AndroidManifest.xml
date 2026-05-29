@@ -26,5 +26,10 @@
       android:name=".VoiceService"
       android:foregroundServiceType="microphone"
       android:exported="false" />
+    <!-- >>> FORK KAR-492 — see ForkNotificationActionReceiver.java -->
+    <receiver
+      android:name=".ForkNotificationActionReceiver"
+      android:exported="false" />
+    <!-- <<< FORK -->
   </application>
 </manifest>
