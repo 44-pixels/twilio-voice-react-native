@@ -166,8 +166,9 @@ class NotificationUtility {
       ForkNotificationActionReceiver.class,
       // <<< FORK
       callRecord.getUuid());
-    // >>> FORK KAR-492 — see ForkNotificationIdentity.java
+    // >>> FORK KAR-492 — see ForkNotificationIdentity.java / ForkInvitePayloadStore.java
     ForkNotificationIdentity.attachIncomingCall(rejectIntent, callRecord);
+    ForkInvitePayloadStore.attachToIntent(rejectIntent, callRecord.getCallSid());
     PendingIntent piRejectIntent = ForkNotificationActionReceiver.rejectPendingIntent(
       context,
       rejectIntent);

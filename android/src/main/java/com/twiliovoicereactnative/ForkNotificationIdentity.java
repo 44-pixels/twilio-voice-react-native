@@ -14,8 +14,9 @@
 // CallRecord. If the process dies after showing a call notification, decline /
 // cancelled-invite paths can restart with no CallRecord and otherwise cannot
 // cancel the stale notification. Derive ids from callSid and copy them into the
-// intents, alongside the invite payload from ForkInvitePayloadStore, so cleanup
-// and reject still work after process death.
+// intents so cleanup can still work after process death. The raw invite payload
+// is attached only to Decline by NotificationUtility; launch/tap/accept intents
+// must not carry a Twilio FCM payload because host app startup may replay it.
 package com.twiliovoicereactnative;
 
 import android.app.NotificationManager;
@@ -58,7 +59,6 @@ public final class ForkNotificationIdentity {
     String callSid = callRecord.getCallSid();
     if (callSid != null && !callSid.isEmpty()) {
       intent.putExtra(EXTRA_CALL_SID, callSid);
-      ForkInvitePayloadStore.attachToIntent(intent, callSid);
     }
     intent.putExtra(EXTRA_NOTIFICATION_ID, incomingNotificationId(callRecord));
   }

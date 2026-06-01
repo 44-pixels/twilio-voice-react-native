@@ -1,8 +1,8 @@
 // FORK — KAR-492
-// Owns: carrying the original Twilio invite FCM payload into notification
-// action intents so a killed process can reconstruct and reject the invite.
+// Owns: carrying the original Twilio invite FCM payload into the notification
+// Decline action so a killed process can reconstruct and reject the invite.
 // Hooks into: VoiceFirebaseMessagingService.MessageHandler.onCallInvite,
-//             VoiceModuleProxy.handleEvent, NotificationUtility incoming-call
+//             VoiceModuleProxy.handleEvent, NotificationUtility Decline
 //             PendingIntent construction, ForkRejectCallAction.
 // Re-check on SDK bump: whether Twilio exposes a public reject-by-payload or
 // persists CallInviteProxy across process death.
