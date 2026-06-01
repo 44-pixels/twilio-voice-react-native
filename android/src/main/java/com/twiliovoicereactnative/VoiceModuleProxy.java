@@ -216,14 +216,9 @@ class VoiceModuleProxy {
       }
 
       // attempt to parse message
-      final boolean success = Voice.handleMessage(
-        reactApplicationContext,
-        eventData,
-        // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
-        new VoiceFirebaseMessagingService.MessageHandler(eventData),
-        // <<< FORK
-        new CallMessageListenerProxy()
-      );
+      // >>> FORK KAR-492 — see ForkVoiceMessageGuard.java
+      final boolean success = ForkVoiceMessageGuard.handleEvent(reactApplicationContext, eventData);
+      // <<< FORK
 
       promise.resolve(success);
     });

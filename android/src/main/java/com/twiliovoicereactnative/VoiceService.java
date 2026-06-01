@@ -291,8 +291,9 @@ public class VoiceService extends Service {
         acceptOptions,
         new CallListenerProxy(callRecord.getUuid(), VoiceService.this)));
     callRecord.setCallInviteUsedState();
-    // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
+    // >>> FORK KAR-492 — see ForkInvitePayloadStore.java / ForkVoiceMessageGuard.java
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
+    ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());
     // <<< FORK
 
     // handle if event spawned from JS
@@ -337,8 +338,9 @@ public class VoiceService extends Service {
     // reject call
     callRecord.getCallInvite().reject(VoiceService.this);
     callRecord.setCallInviteUsedState();
-    // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
+    // >>> FORK KAR-492 — see ForkInvitePayloadStore.java / ForkVoiceMessageGuard.java
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
+    ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());
     // <<< FORK
 
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java
@@ -373,8 +375,9 @@ public class VoiceService extends Service {
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java
     ForkLockScreenFlags.clearForEndedCall();
     // <<< FORK
-    // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
+    // >>> FORK KAR-492 — see ForkInvitePayloadStore.java / ForkVoiceMessageGuard.java
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
+    ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());
     // <<< FORK
 
     // notify JS layer

@@ -43,6 +43,7 @@ public final class ForkCancelledInviteCleanup {
         "cancelled invite had no CallRecord and no notification id for callSid="
           + cancelledCallInvite.getCallSid());
     }
+    ForkVoiceMessageGuard.markSettled(cancelledCallInvite.getCallSid());
     return null;
   }
 }

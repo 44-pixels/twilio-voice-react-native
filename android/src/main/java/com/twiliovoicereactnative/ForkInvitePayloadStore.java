@@ -123,8 +123,9 @@ public final class ForkInvitePayloadStore {
     public void onCallInvite(@NonNull CallInvite callInvite) {
       logger.log("rejecting reconstructed CallInvite " + callInvite.getCallSid());
       callInvite.reject(context);
-      clear(callInvite.getCallSid());
       ForkNotificationIdentity.cancelForCallSid(context, callInvite.getCallSid());
+      clear(callInvite.getCallSid());
+      ForkVoiceMessageGuard.markSettled(callInvite.getCallSid());
       ForkRejectCallAction.finishDeclineKey(actionKey == null ? callInvite.getCallSid() : actionKey);
       onComplete.run();
     }
@@ -135,6 +136,7 @@ public final class ForkInvitePayloadStore {
       logger.log("reconstructed invite already cancelled " + cancelledCallInvite.getCallSid());
       ForkNotificationIdentity.cancelForCallSid(context, cancelledCallInvite.getCallSid());
       clear(cancelledCallInvite.getCallSid());
+      ForkVoiceMessageGuard.markSettled(cancelledCallInvite.getCallSid());
       ForkRejectCallAction.finishDeclineKey(
         actionKey == null ? cancelledCallInvite.getCallSid() : actionKey);
       onComplete.run();

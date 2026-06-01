@@ -15,7 +15,6 @@ import com.twilio.voice.CallException;
 import com.twilio.voice.CallInvite;
 import com.twilio.voice.CancelledCallInvite;
 import com.twilio.voice.MessageListener;
-import com.twilio.voice.Voice;
 
 import java.util.Map;
 import java.util.UUID;
@@ -41,6 +40,9 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
 
       getCallRecordDatabase().add(callRecord);
       getVoiceServiceApi().incomingCall(callRecord);
+      // >>> FORK KAR-492 — see ForkVoiceMessageGuard.java
+      ForkVoiceMessageGuard.markPresented(payload, callInvite.getCallSid());
+      // <<< FORK
     }
 
     @Override
@@ -87,11 +89,9 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
 
     // Check if message contains a data payload.
     if (!remoteMessage.getData().isEmpty()) {
-      if (!Voice.handleMessage(
-        this,
-        remoteMessage.getData(),
-        new MessageHandler(remoteMessage.getData()),
-        new CallMessageListenerProxy())) {
+      // >>> FORK KAR-492 — see ForkVoiceMessageGuard.java
+      if (!ForkVoiceMessageGuard.handleNativeFcm(this, remoteMessage.getData())) {
+      // <<< FORK
         logger.error("The message was not a valid Twilio Voice SDK payload: " +
           remoteMessage.getData());
       }

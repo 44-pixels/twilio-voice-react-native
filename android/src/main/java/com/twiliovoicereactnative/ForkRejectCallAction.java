@@ -109,6 +109,7 @@ public final class ForkRejectCallAction {
     if (callRecord.getCallInvite() == null) {
       logger.warning("Decline action found CallRecord without CallInvite " + callRecord.getUuid());
       ForkNotificationIdentity.cancelForCallSid(context, callRecord.getCallSid());
+      ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());
       finishDeclineKey(actionKey);
       return;
     }
@@ -117,6 +118,7 @@ public final class ForkRejectCallAction {
     callRecord.setCallInviteUsedState();
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
     ForkNotificationIdentity.cancelForCallSid(context, callRecord.getCallSid());
+    ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());
     finishDeclineKey(actionKey);
 
     ForkLockScreenFlags.clearForEndedCall();
