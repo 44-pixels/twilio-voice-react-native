@@ -21,9 +21,11 @@
 // ringer ~0.5 s after it started. Splitting the full-screen slot onto its
 // own action routes that launch here: we still re-post the notification
 // (so the user can reach Accept/Reject from the shade once the activity is
-// over the lock screen) but we do NOT stop the ringer and do NOT emit the
-// notificationTapped JS event, because the user did not tap anything.
-// Tap behavior on setContentIntent is unchanged upstream.
+// over the lock screen), without another full-screen intent because some OEMs
+// immediately consume the re-posted notification and re-fire the FSI in a loop.
+// We do NOT stop the ringer and do NOT emit the notificationTapped JS event,
+// because the user did not tap anything. Tap behavior on setContentIntent is
+// unchanged upstream.
 package com.twiliovoicereactnative;
 
 import android.app.Notification;
@@ -70,14 +72,10 @@ public final class ForkFullScreenIncomingCall {
    *  Leaves the ringer alone — it must keep playing until accept / reject /
    *  cancel / timeout.
    *
-   *  The re-post keeps setFullScreenIntent because
-   *  NotificationCompat.CallStyle.forIncomingCall requires it; without it the
-   *  system ranks the call notification lower and on a locked screen it will
-   *  not surface the call UI / launch the activity over the keyguard. The FSI
-   *  on the re-post does not re-fire: the OS only auto-fires a full-screen
-   *  intent when the app is not in foreground, and by the time this method
-   *  runs the activity is foreground (keyguard cleared via
-   *  FLAG_SHOW_WHEN_LOCKED in VoiceActivityProxy). */
+   *  The re-post intentionally omits setFullScreenIntent. Xiaomi was observed
+   *  to immediately consume the re-posted notification and re-fire the FSI in
+   *  a loop while the activity was above the lock screen, preventing a stable
+   *  notification from remaining in the shade. */
   static void onLaunched(@NonNull Context context,
                          @Nullable CallRecordDatabase.CallRecord callRecord) {
     if (null == callRecord) {
@@ -90,11 +88,12 @@ public final class ForkFullScreenIncomingCall {
     Notification notification = NotificationUtility.createIncomingCallNotification(
       context,
       callRecord,
-      Constants.VOICE_CHANNEL_HIGH_IMPORTANCE);
+      Constants.VOICE_CHANNEL_HIGH_IMPORTANCE,
+      false);
     if (context instanceof VoiceService) {
       foregroundIncomingCall((VoiceService) context, callRecord.getNotificationId(), notification);
-    } else {
-      nm.notify(callRecord.getNotificationId(), notification);
+    } else if (!VoiceService.foregroundNotificationIfRunning(callRecord.getNotificationId(), notification)) {
+      logger.warning("no running VoiceService for full-screen incoming repost");
     }
   }
 

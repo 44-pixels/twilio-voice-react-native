@@ -450,6 +450,14 @@ public class VoiceService extends Service {
       (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     mNotificationManager.cancel(notificationId);
   }
+  // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
+  static boolean foregroundNotificationIfRunning(int id, Notification notification) {
+    VoiceService service = runningService.get();
+    if (service == null) return false;
+    service.foregroundNotification(id, notification);
+    return true;
+  }
+  // <<< FORK
   static void removeForegroundNotificationIfRunning() {
     VoiceService service = runningService.get();
     if (service == null) return;

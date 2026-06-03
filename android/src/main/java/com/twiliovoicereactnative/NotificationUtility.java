@@ -135,6 +135,17 @@ class NotificationUtility {
   public static Notification createIncomingCallNotification(@NonNull Context context,
                                                             @NonNull final CallRecord callRecord,
                                                             @NonNull final String channelImportance) {
+    // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
+    return createIncomingCallNotification(context, callRecord, channelImportance, true);
+    // <<< FORK
+  }
+
+  // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
+  public static Notification createIncomingCallNotification(@NonNull Context context,
+                                                            @NonNull final CallRecord callRecord,
+                                                            @NonNull final String channelImportance,
+                                                            final boolean includeFullScreenIntent) {
+  // <<< FORK
     final NotificationResource notificationResource = new NotificationResource(
       context,
       NotificationResource.Type.INCOMING,
@@ -184,18 +195,26 @@ class NotificationUtility {
     // <<< FORK
     PendingIntent piAcceptIntent = constructPendingIntentForActivity(context, acceptIntent);
 
-    return constructNotificationBuilder(context, channelImportance)
+    NotificationCompat.Builder builder = constructNotificationBuilder(context, channelImportance)
       .setSmallIcon(notificationResource.getSmallIconId())
       .setCategory(Notification.CATEGORY_CALL)
       .setAutoCancel(true)
       .setContentIntent(piForegroundIntent)
-      // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-      .setFullScreenIntent(ForkFullScreenIncomingCall.pendingIntent(context, callRecord), true)
+      // >>> FORK KAR-443 — keep incoming call heads-up behavior on OEMs that still consult compat priority
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       // <<< FORK
       .addPerson(incomingCaller)
       .setStyle(NotificationCompat.CallStyle.forIncomingCall(
-        incomingCaller, piRejectIntent, piAcceptIntent))
-      .build();
+        incomingCaller, piRejectIntent, piAcceptIntent));
+
+    // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
+    if (includeFullScreenIntent) {
+      builder.setFullScreenIntent(ForkFullScreenIncomingCall.pendingIntent(context, callRecord), true);
+    }
+    // <<< FORK
+
+    return builder.build();
   }
 
   public static Notification createCallAnsweredNotificationWithLowImportance(@NonNull Context context,
