@@ -157,13 +157,6 @@ public class VoiceService extends Service {
         case ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION:
           foregroundAndDeprioritizeIncomingCallNotification(getCallRecord(getMessageUUID(intent)));
           break;
-        // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-        case ForkFullScreenIncomingCall.ACTION:
-          ForkFullScreenIncomingCall.onLaunched(
-            VoiceService.this,
-            ForkCallRecordLookup.getForFullScreenLaunch(intent));
-          break;
-        // <<< FORK
         case ACTION_PUSH_APP_TO_FOREGROUND:
           logger.warning("VoiceService received foreground request, ignoring");
           break;
@@ -450,14 +443,6 @@ public class VoiceService extends Service {
       (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     mNotificationManager.cancel(notificationId);
   }
-  // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-  static boolean foregroundNotificationIfRunning(int id, Notification notification) {
-    VoiceService service = runningService.get();
-    if (service == null) return false;
-    service.foregroundNotification(id, notification);
-    return true;
-  }
-  // <<< FORK
   static void removeForegroundNotificationIfRunning() {
     VoiceService service = runningService.get();
     if (service == null) return;

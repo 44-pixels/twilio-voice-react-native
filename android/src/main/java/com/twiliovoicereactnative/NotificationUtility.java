@@ -135,17 +135,6 @@ class NotificationUtility {
   public static Notification createIncomingCallNotification(@NonNull Context context,
                                                             @NonNull final CallRecord callRecord,
                                                             @NonNull final String channelImportance) {
-    // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-    return createIncomingCallNotification(context, callRecord, channelImportance, true);
-    // <<< FORK
-  }
-
-  // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-  public static Notification createIncomingCallNotification(@NonNull Context context,
-                                                            @NonNull final CallRecord callRecord,
-                                                            @NonNull final String channelImportance,
-                                                            final boolean includeFullScreenIntent) {
-  // <<< FORK
     final NotificationResource notificationResource = new NotificationResource(
       context,
       NotificationResource.Type.INCOMING,
@@ -200,19 +189,19 @@ class NotificationUtility {
       .setCategory(Notification.CATEGORY_CALL)
       .setAutoCancel(true)
       .setContentIntent(piForegroundIntent)
-      // >>> FORK KAR-443 — keep incoming call heads-up behavior on OEMs that still consult compat priority
+      // >>> FORK KAR-574 — no full-screen intent: do NOT promote the app over the
+      // lock screen for a ringing call (the CallStyle notification is the only
+      // incoming-call UI on Android, so an over-keyguard activity would just
+      // occlude the Accept/Reject buttons). PRIORITY_HIGH + VISIBILITY_PUBLIC are
+      // now the sole lock-screen surfacing mechanism; the high-importance channel
+      // drives the heads-up peek when unlocked. Screen wake on a locked, screen-off
+      // device is handled by the wakelock in VoiceFirebaseMessagingService.
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       // <<< FORK
       .addPerson(incomingCaller)
       .setStyle(NotificationCompat.CallStyle.forIncomingCall(
         incomingCaller, piRejectIntent, piAcceptIntent));
-
-    // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-    if (includeFullScreenIntent) {
-      builder.setFullScreenIntent(ForkFullScreenIncomingCall.pendingIntent(context, callRecord), true);
-    }
-    // <<< FORK
 
     return builder.build();
   }
@@ -351,7 +340,6 @@ class NotificationUtility {
     return voiceChannelId;
   }
 
-  // Package-private so ForkFullScreenIncomingCall can reuse it. FORK KAR-443.
   static PendingIntent constructPendingIntentForActivity(@NonNull Context context,
                                                          @NonNull final Intent intent) {
     return PendingIntent.getActivity(

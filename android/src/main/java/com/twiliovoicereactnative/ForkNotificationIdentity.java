@@ -2,8 +2,7 @@
 // Owns: stable incoming-call notification ids and PendingIntent identity.
 // Hooks into: VoiceService.incomingCall / ACTION_REJECT_CALL,
 //             VoiceFirebaseMessagingService.MessageHandler.onCancelledCallInvite,
-//             NotificationUtility PendingIntent construction,
-//             ForkFullScreenIncomingCall.pendingIntent.
+//             NotificationUtility PendingIntent construction.
 // Re-check on SDK bump: whether upstream still uses random incoming-call
 // notification ids and a constant PendingIntent requestCode.
 //
