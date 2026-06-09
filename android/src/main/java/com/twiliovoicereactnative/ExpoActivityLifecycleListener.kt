@@ -8,14 +8,32 @@ import android.Manifest
 import android.content.Intent
 import android.widget.Toast
 import android.os.Build
+import android.view.View
+import android.view.ViewTreeObserver
 
 class ExpoActivityLifecycleListener : ReactActivityLifecycleListener {
     private var voiceActivityProxy: VoiceActivityProxy? = null
+    // >>> FORK KAR-591 — re-post the incoming heads-up on window-focus-gained, see ForkIncomingCallFocus.java
+    private var windowFocusListener: ViewTreeObserver.OnWindowFocusChangeListener? = null
+    private var decorView: View? = null
+    // <<< FORK
 
     override fun onCreate(activity: Activity?, savedInstanceState: Bundle?) {
         if (activity != null) {
             // >>> FORK KAR-448 — see ForkLockScreenFlags.java
             ForkLockScreenFlags.registerActivity(activity)
+            // <<< FORK
+            // >>> FORK KAR-591 — arm on tap + re-post the heads-up when the window gains focus (settled + unlocked), see ForkIncomingCallFocus.java
+            activity.intent?.let { ForkIncomingCallFocus.armFromIntent(it) }
+            val appCtx = activity.applicationContext
+            activity.window?.decorView?.let { decor ->
+                val listener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+                    if (hasFocus) ForkIncomingCallFocus.onWindowFocusGained(appCtx)
+                }
+                decor.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+                windowFocusListener = listener
+                decorView = decor
+            }
             // <<< FORK
             voiceActivityProxy = VoiceActivityProxy(
                 activity
@@ -52,6 +70,9 @@ class ExpoActivityLifecycleListener : ReactActivityLifecycleListener {
     }
 
     override fun onNewIntent(intent: Intent?): Boolean {
+        // >>> FORK KAR-591 — arm the heads-up re-post on notification tap, see ForkIncomingCallFocus.java
+        intent?.let { ForkIncomingCallFocus.armFromIntent(it) }
+        // <<< FORK
         voiceActivityProxy?.onNewIntent(intent)
 
         return super.onNewIntent(intent)
@@ -63,6 +84,13 @@ class ExpoActivityLifecycleListener : ReactActivityLifecycleListener {
         if (activity != null) {
             ForkLockScreenFlags.unregisterActivity(activity)
         }
+        // <<< FORK
+        // >>> FORK KAR-591 — detach the window-focus listener, see ForkIncomingCallFocus.java
+        windowFocusListener?.let { listener ->
+            decorView?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(listener)
+        }
+        windowFocusListener = null
+        decorView = null
         // <<< FORK
 
         return super.onDestroy(activity)

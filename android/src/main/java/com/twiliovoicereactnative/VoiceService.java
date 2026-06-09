@@ -24,7 +24,6 @@ import static com.twiliovoicereactnative.Constants.ACTION_RAISE_OUTGOING_CALL_NO
 import static com.twiliovoicereactnative.Constants.ACTION_REJECT_CALL;
 import static com.twiliovoicereactnative.Constants.JS_EVENT_KEY_CALL_INVITE_INFO;
 import static com.twiliovoicereactnative.Constants.JS_EVENT_KEY_CANCELLED_CALL_INVITE_INFO;
-import static com.twiliovoicereactnative.Constants.VOICE_CHANNEL_DEFAULT_IMPORTANCE;
 import static com.twiliovoicereactnative.Constants.VOICE_CHANNEL_HIGH_IMPORTANCE;
 import static com.twiliovoicereactnative.JSEventEmitter.constructJSMap;
 import static com.twiliovoicereactnative.ReactNativeArgumentsSerializer.serializeCall;
@@ -404,15 +403,9 @@ public class VoiceService extends Service {
     if (null == callRecord) { logger.warning("foregroundAndDeprioritizeIncomingCallNotification: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("foregroundAndDeprioritizeIncomingCallNotification: " + callRecord.getUuid());
 
-    // cancel existing notification & put up in call
-    Notification notification = NotificationUtility.createIncomingCallNotification(
-      VoiceService.this,
-      callRecord,
-      VOICE_CHANNEL_DEFAULT_IMPORTANCE);
-    createOrReplaceNotification(callRecord.getNotificationId(), notification);
-
-    // stop active sound (if any)
-    VoiceApplicationProxy.getMediaPlayerManager().stop();
+    // >>> FORK KAR-591 — do NOT deprioritize or stop the ringer; the peeking heads-up is
+    // re-posted when the activity's window gains focus (armed on the tap). See ForkIncomingCallFocus.java.
+    // <<< FORK
 
     // notify JS layer
     sendJSEvent(
