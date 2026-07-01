@@ -28,9 +28,16 @@ public final class ForkCancelledInviteCleanup {
     @NonNull CancelledCallInvite cancelledCallInvite
   ) {
     CallRecordDatabase.CallRecord callRecord = getCallRecordDatabase()
-      .remove(new CallRecordDatabase.CallRecord(cancelledCallInvite.getCallSid()));
+      .get(new CallRecordDatabase.CallRecord(cancelledCallInvite.getCallSid()));
     ForkInvitePayloadStore.clear(cancelledCallInvite.getCallSid());
-    if (callRecord != null) return callRecord;
+    if (callRecord != null && isAcceptedOrActive(callRecord)) {
+      logger.warning(
+        "stale cancelled invite for accepted call; keeping CallRecord callSid="
+          + cancelledCallInvite.getCallSid());
+      ForkVoiceMessageGuard.markSettled(cancelledCallInvite.getCallSid());
+      return null;
+    }
+    if (callRecord != null) return getCallRecordDatabase().remove(callRecord);
 
     if (ForkNotificationIdentity.cancelForCallSid(
       VoiceApplicationProxy.getApplicationContext(),
@@ -45,5 +52,10 @@ public final class ForkCancelledInviteCleanup {
     }
     ForkVoiceMessageGuard.markSettled(cancelledCallInvite.getCallSid());
     return null;
+  }
+
+  private static boolean isAcceptedOrActive(@NonNull CallRecordDatabase.CallRecord callRecord) {
+    return callRecord.getCallInviteState() == CallRecordDatabase.CallRecord.CallInviteState.USED
+      || callRecord.getVoiceCall() != null;
   }
 }
