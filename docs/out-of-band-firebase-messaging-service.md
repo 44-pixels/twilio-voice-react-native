@@ -27,10 +27,48 @@ See [this file](/android/src/main/res/values/config.xml) for more details.
 With the built-in Firebase Messaging service disabled, any other Firebase
 Messaging service will be able to listen for Firebase messages.
 
-## voice.handleFirebaseMessage API
+## Native-first Firebase message handling
 Firebase messages can now be passed into the Voice SDK from any other source.
 
-The following API has been implemented to facilitate this:
+For incoming calls, prefer handling Twilio payloads in a native Android
+`FirebaseMessagingService` before starting React Native / JS. This avoids cold
+start delays for terminated apps.
+
+```kotlin
+import com.google.firebase.messaging.RemoteMessage
+import com.twiliovoicereactnative.NativeFirebaseMessageHandler
+import io.invertase.firebase.messaging.ReactNativeFirebaseMessagingService
+
+class AppFirebaseMessagingService : ReactNativeFirebaseMessagingService() {
+  override fun onMessageReceived(message: RemoteMessage) {
+    if (NativeFirebaseMessageHandler.handle(applicationContext, message)) return
+    super.onMessageReceived(message)
+  }
+}
+```
+
+Disable the SDK's built-in Firebase service and remove RNFirebase's service in
+your app manifest, then register the app service above as the single
+`com.google.firebase.MESSAGING_EVENT` service.
+
+Expo prebuild apps can let this package generate that native service:
+
+```js
+// app.config.js
+module.exports = {
+  plugins: ['@twilio/voice-react-native-sdk'],
+};
+```
+
+The plugin disables the SDK's built-in Firebase service, removes RNFirebase's
+service, and registers a generated native multiplexer service that calls
+`NativeFirebaseMessageHandler` before delegating non-Twilio messages to
+RNFirebase.
+
+## voice.handleFirebaseMessage API
+The JS API remains available for foreground handling or non-critical fallback
+paths:
+
 ```ts
 import { Voice } from '@twilio/voice-react-native-sdk';
 const voice = new Voice();

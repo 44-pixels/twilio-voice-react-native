@@ -22,6 +22,7 @@
 package com.twiliovoicereactnative;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -39,6 +40,7 @@ import androidx.core.graphics.drawable.IconCompat;
 import com.twilio.voice.CallInvite;
 
 import java.io.InputStream;
+import java.util.Map;
 
 public final class ForkContactLookup {
   private static final SDKLog logger = new SDKLog(ForkContactLookup.class);
@@ -89,6 +91,12 @@ public final class ForkContactLookup {
    */
   @NonNull
   public static Result resolveForIncoming(@NonNull Context ctx,
+                                          @NonNull CallRecordDatabase.CallRecord callRecord) {
+    return resolveForIncoming(ctx, incomingFallbackName(ctx, callRecord), callRecord.getCallInvite());
+  }
+
+  @NonNull
+  public static Result resolveForIncoming(@NonNull Context ctx,
                                           @NonNull String fallbackName,
                                           @Nullable CallInvite callInvite) {
     final String e164 = pickE164(fallbackName, callInvite);
@@ -131,6 +139,49 @@ public final class ForkContactLookup {
     // book we want the new name to surface immediately, alongside the photo.
     final IconCompat icon = loadIcon(resolver, photoUri);
     return new Result(contactName, icon, telUri);
+  }
+
+  @NonNull
+  private static String incomingFallbackName(@NonNull Context ctx,
+                                             @NonNull CallRecordDatabase.CallRecord callRecord) {
+    final String template = ConfigurationProperties.getIncomingCallContactHandleTemplate(ctx);
+    if (template != null) {
+      final String processedTemplate = templateDisplayName(template, callRecord.getCustomParameters());
+      if (!processedTemplate.isEmpty()) return processedTemplate;
+    }
+
+    final CallInvite callInvite = callRecord.getCallInvite();
+    final String from = callInvite == null ? "" : displayName(callInvite);
+    return incomingCallerNameText(ctx).replace("${from}", from);
+  }
+
+  private static String templateDisplayName(@NonNull String template,
+                                            @NonNull Map<String, String> twimlParams) {
+    String processedTemplate = template;
+    for (Map.Entry<String, String> entry : twimlParams.entrySet()) {
+      processedTemplate = processedTemplate.replace(
+        "${" + entry.getKey() + "}",
+        entry.getValue());
+    }
+    return processedTemplate;
+  }
+
+  private static String displayName(@NonNull CallInvite callInvite) {
+    final String title = callInvite.getFrom();
+    if (title.startsWith("client:")) return title.replaceFirst("client:", "");
+    return title;
+  }
+
+  @NonNull
+  private static String incomingCallerNameText(@NonNull Context ctx) {
+    final int id = textResourceId(ctx, "incoming_call_caller_name_text");
+    if (id == 0) return "${from}";
+    return ctx.getString(id);
+  }
+
+  @SuppressLint("DiscouragedApi")
+  private static int textResourceId(@NonNull Context ctx, @NonNull String id) {
+    return ctx.getResources().getIdentifier(id, "string", ctx.getPackageName());
   }
 
   @Nullable

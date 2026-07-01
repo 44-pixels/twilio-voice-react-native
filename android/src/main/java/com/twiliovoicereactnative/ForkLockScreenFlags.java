@@ -6,9 +6,7 @@
 // show over the keyguard on every foreground → lock → unlock cycle.
 // Hooks into: VoiceActivityProxy.onCreate / onNewIntent (apply when the activity
 //             is launched by a voice-action intent the user engaged with — Accept /
-//             notification tap. The ringing full-screen-intent launch
-//             (ForkFullScreenIncomingCall.ACTION) is deliberately excluded so the
-//             keyguard stays on top during ring, see KAR-574),
+//             notification tap),
 //             VoiceService.acceptCall (apply when an incoming call becomes
 //             active in a foreground app — the activity is never re-entered in
 //             that flow so the intent-gated path doesn't fire),
@@ -76,22 +74,13 @@ public final class ForkLockScreenFlags {
   /** Called from VoiceActivityProxy when the activity is entered with an
    *  intent. Applies the call flags iff the intent is a voice action the user
    *  engaged with (Accept / notification tap), so the activity bypasses the
-   *  keyguard only when the user chose to handle the call. The ringing
-   *  full-screen-intent launch (ForkFullScreenIncomingCall.ACTION) is excluded
-   *  (KAR-574): it must leave the keyguard on top so the CallStyle notification
-   *  stays visible. For any other launch — ACTION_MAIN, deep links, etc. — flags
-   *  are cleared so the keyguard behaves normally on subsequent lock/unlock. */
+   *  keyguard only when the user chose to handle the call. For any other launch
+   *  — ACTION_MAIN, deep links, etc. — flags are cleared so the keyguard behaves
+   *  normally on subsequent lock/unlock. */
   public static void applyIfVoiceAction(@NonNull Activity activity, @Nullable Intent intent) {
     String action = (intent != null) ? intent.getAction() : null;
-    // >>> FORK KAR-574 — the ringing full-screen-intent launch must NOT bring the bare app
-    // over the keyguard: it has no call UI of its own, so it would only occlude the
-    // CallStyle call notification the user needs to Accept/Reject. Keep the keyguard on top
-    // during ring (the notification surfaces there); promote over the keyguard only once
-    // the user explicitly engages — ACTION_ACCEPT_CALL / notification tap, or acceptCall via
-    // applyForActiveCall.
     boolean promoteOverKeyguard = action != null
-      && VoiceIntentFilter.isVoiceAction(action)
-      && !ForkFullScreenIncomingCall.ACTION.equals(action);
+      && VoiceIntentFilter.isVoiceAction(action);
     if (promoteOverKeyguard) {
       logger.debug("applyIfVoiceAction: applying for action=" + action);
       addFlags(activity);
@@ -99,7 +88,6 @@ public final class ForkLockScreenFlags {
       logger.debug("applyIfVoiceAction: clearing for action=" + action);
       clearFlags(activity);
     }
-    // <<< FORK
   }
 
   /** Called from VoiceService.acceptCall when an incoming call becomes active.

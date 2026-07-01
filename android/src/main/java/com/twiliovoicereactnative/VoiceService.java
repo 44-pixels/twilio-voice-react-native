@@ -156,13 +156,6 @@ public class VoiceService extends Service {
         case ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION:
           foregroundAndDeprioritizeIncomingCallNotification(getCallRecord(getMessageUUID(intent)));
           break;
-        // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-        case ForkFullScreenIncomingCall.ACTION:
-          ForkFullScreenIncomingCall.onLaunched(
-            VoiceService.this,
-            ForkCallRecordLookup.getForFullScreenLaunch(intent));
-          break;
-        // <<< FORK
         case ACTION_PUSH_APP_TO_FOREGROUND:
           logger.warning("VoiceService received foreground request, ignoring");
           break;
@@ -274,6 +267,10 @@ public class VoiceService extends Service {
     VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().activate();
     // <<< FORK
 
+    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+    ForkIncomingCallCoordinator.onAnswered(callRecord);
+    // <<< FORK
+
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java (foreground-accept path; intent-gated path in VoiceActivityProxy doesn't fire here)
     ForkLockScreenFlags.applyForActiveCall();
     // <<< FORK
@@ -334,6 +331,10 @@ public class VoiceService extends Service {
     VoiceApplicationProxy.getMediaPlayerManager().stop();
     VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
 
+    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+    ForkIncomingCallCoordinator.onRejected(callRecord);
+    // <<< FORK
+
     // reject call
     callRecord.getCallInvite().reject(VoiceService.this);
     callRecord.setCallInviteUsedState();
@@ -373,6 +374,9 @@ public class VoiceService extends Service {
 
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java
     ForkLockScreenFlags.clearForEndedCall();
+    // <<< FORK
+    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+    ForkIncomingCallCoordinator.onCancelled(callRecord);
     // <<< FORK
     // >>> FORK KAR-492 — see ForkInvitePayloadStore.java / ForkVoiceMessageGuard.java
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
@@ -443,14 +447,6 @@ public class VoiceService extends Service {
       (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     mNotificationManager.cancel(notificationId);
   }
-  // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-  static boolean foregroundNotificationIfRunning(int id, Notification notification) {
-    VoiceService service = runningService.get();
-    if (service == null) return false;
-    service.foregroundNotification(id, notification);
-    return true;
-  }
-  // <<< FORK
   static void removeForegroundNotificationIfRunning() {
     VoiceService service = runningService.get();
     if (service == null) return;
@@ -463,7 +459,11 @@ public class VoiceService extends Service {
   private void foregroundNotification(int id, Notification notification) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       try {
-        startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+        startForeground(
+          id,
+          notification,
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            | ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
       } catch (Exception e) {
         sendPermissionsError();
         logger.warning(e, "Failed to place notification due to lack of permissions");

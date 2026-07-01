@@ -65,6 +65,12 @@ public final class ForkVoiceMessageGuard {
     return handleMessage(context, payload, Source.HANDLE_EVENT);
   }
 
+  public static synchronized boolean shouldWakeForIncomingCall(@NonNull Context context,
+                                                               @NonNull Map<String, String> payload) {
+    TwilioMessage message = TwilioMessage.from(payload, null);
+    return TYPE_CALL.equals(message.messageType) && !decide(context, message).skip;
+  }
+
   public static synchronized void markPresented(@Nullable Map<String, String> payload,
                                                 @Nullable String fallbackCallSid) {
     TwilioMessage message = TwilioMessage.from(payload, fallbackCallSid);

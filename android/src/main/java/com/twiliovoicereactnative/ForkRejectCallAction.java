@@ -105,11 +105,13 @@ public final class ForkRejectCallAction {
     VoiceService.removeForegroundNotificationIfRunning();
     VoiceApplicationProxy.getMediaPlayerManager().stop();
     VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
+    ForkIncomingCallCoordinator.onRejected(callRecord);
 
     if (callRecord.getCallInvite() == null) {
       logger.warning("Decline action found CallRecord without CallInvite " + callRecord.getUuid());
       ForkNotificationIdentity.cancelForCallSid(context, callRecord.getCallSid());
       ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());
+      ForkLockScreenFlags.clearForEndedCall();
       finishDeclineKey(actionKey);
       return;
     }

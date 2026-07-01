@@ -5,6 +5,7 @@ buildscript {
     'googleServices'     : '4.3.10',
     'voiceAndroid'       : '6.7.1',
     'androidxCore'       : '1.12.0',
+    'androidxCoreTelecom': '1.1.0-alpha03',
     'androidxLifecycle'  : '2.2.0',
     'audioSwitch'        : '1.2.2',
     'firebaseMessaging'  : '23.4.0',
@@ -73,6 +74,7 @@ dependencies {
   implementation "com.facebook.react:react-native:+"  // From node_modules
   implementation "com.twilio:voice-android:${versions.voiceAndroid}"
   implementation "androidx.core:core:${versions.androidxCore}"
+  implementation "androidx.core:core-telecom:${versions.androidxCoreTelecom}"
   implementation "androidx.lifecycle:lifecycle-extensions:${versions.androidxLifecycle}"
   implementation "com.google.firebase:firebase-messaging:${versions.firebaseMessaging}"
   implementation "com.twilio:audioswitch:${versions.audioSwitch}"

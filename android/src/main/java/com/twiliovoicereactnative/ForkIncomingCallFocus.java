@@ -3,7 +3,8 @@
 // peeking heads-up (Accept/Decline) with the ringer playing, instead of deprioritizing it.
 // Hooks into: ExpoActivityLifecycleListener (arm on tap + re-post on window-focus-gained).
 //             VoiceService just skips the upstream deprioritize + ringer stop.
-// Re-check on SDK bump: KAR-443 onLaunched still promotes via startForeground;
+// Re-check on SDK bump: notification tap still dispatches
+// ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION;
 // accept/reject/cancel still clear the notification + stop the ringer.
 //
 // Peek recipe (all required, learned on OnePlus/OxygenOS): CallStyle needs FSI or FGS;
