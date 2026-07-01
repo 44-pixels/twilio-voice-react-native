@@ -135,25 +135,13 @@ class NotificationUtility {
   public static Notification createIncomingCallNotification(@NonNull Context context,
                                                             @NonNull final CallRecord callRecord,
                                                             @NonNull final String channelImportance) {
-    // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-    return createIncomingCallNotification(context, callRecord, channelImportance, true);
-    // <<< FORK
-  }
-
-  // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-  public static Notification createIncomingCallNotification(@NonNull Context context,
-                                                            @NonNull final CallRecord callRecord,
-                                                            @NonNull final String channelImportance,
-                                                            final boolean includeFullScreenIntent) {
-  // <<< FORK
     final NotificationResource notificationResource = new NotificationResource(
       context,
       NotificationResource.Type.INCOMING,
       callRecord);
 
     // >>> FORK KAR-479 — see ForkContactLookup.java
-    final ForkContactLookup.Result forkLookup = ForkContactLookup.resolveForIncoming(
-      context, notificationResource.getName(), callRecord.getCallInvite());
+    final ForkContactLookup.Result forkLookup = ForkContactLookup.resolveForIncoming(context, callRecord);
     final Person.Builder forkPersonBuilder = new Person.Builder().setName(forkLookup.displayName);
     if (forkLookup.icon != null) forkPersonBuilder.setIcon(forkLookup.icon);
     if (forkLookup.telUri != null) forkPersonBuilder.setUri(forkLookup.telUri);
@@ -209,9 +197,7 @@ class NotificationUtility {
         incomingCaller, piRejectIntent, piAcceptIntent));
 
     // >>> FORK KAR-443 — see ForkFullScreenIncomingCall.java
-    if (includeFullScreenIntent) {
-      builder.setFullScreenIntent(ForkFullScreenIncomingCall.pendingIntent(context, callRecord), true);
-    }
+    builder.setFullScreenIntent(ForkFullScreenIncomingCall.pendingIntent(context, callRecord), true);
     // <<< FORK
 
     return builder.build();

@@ -1,0 +1,43 @@
+// FORK — KAR-492
+// Owns: public native entry point for host-app Firebase Messaging multiplexers.
+// Hooks into: host app FirebaseMessagingService implementations that need to
+// route Twilio Voice payloads before RN/JS startup.
+// Re-check on SDK bump: VoiceFirebaseMessagingService.MessageHandler still
+// owns CallInvite/CancelledCallInvite handling, ForkIncomingCallCoordinator
+// still wakes incoming calls before Voice.handleMessage, and Twilio call
+// payloads still carry twi_message_type=twilio.voice.call.
+package com.twiliovoicereactnative;
+
+import android.content.Context;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.google.firebase.messaging.RemoteMessage;
+
+import java.util.Map;
+
+/**
+ * Native-first Twilio Voice FCM handler for apps that provide their own
+ * FirebaseMessagingService, for example to multiplex with RNFirebase.
+ *
+ * <p>Call this before starting React Native / JS. It returns {@code true} when
+ * the payload was consumed by the Voice SDK or intentionally skipped by the
+ * fork's duplicate/stale-message guard. Return immediately in that case; pass
+ * the message to the app's regular Firebase handler only when this returns
+ * {@code false}.</p>
+ */
+public final class NativeFirebaseMessageHandler {
+  private NativeFirebaseMessageHandler() {}
+
+  public static boolean handle(@NonNull Context context, @NonNull RemoteMessage message) {
+    return handle(context, message.getData());
+  }
+
+  public static boolean handle(@NonNull Context context,
+                               @Nullable Map<String, String> data) {
+    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+    return ForkIncomingCallCoordinator.handleNativeFcm(context, data);
+    // <<< FORK
+  }
+}

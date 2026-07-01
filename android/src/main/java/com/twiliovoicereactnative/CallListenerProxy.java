@@ -58,6 +58,9 @@ class CallListenerProxy implements Call.Listener {
 
     // find call record & remove
     CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().remove(new CallRecord(uuid)));
+    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+    ForkIncomingCallCoordinator.onDisconnected(callRecord, callException);
+    // <<< FORK
 
     // take down notification
     getVoiceServiceApi().cancelActiveCallNotification(callRecord);
@@ -100,6 +103,9 @@ class CallListenerProxy implements Call.Listener {
     callRecord.setCall(call);
     callRecord.setTimestamp(new Date());
     getMediaPlayerManager().stop();
+    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+    ForkIncomingCallCoordinator.onConnected(callRecord);
+    // <<< FORK
 
     // notify JS layer
     sendJSEvent(
@@ -143,6 +149,9 @@ class CallListenerProxy implements Call.Listener {
 
     // find & remove call record
     CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().remove(new CallRecord(uuid)));
+    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+    ForkIncomingCallCoordinator.onDisconnected(callRecord, callException);
+    // <<< FORK
 
     // stop audio & cancel notification
     getMediaPlayerManager().stop();

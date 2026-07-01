@@ -5,7 +5,6 @@ import static com.twiliovoicereactnative.VoiceApplicationProxy.getVoiceServiceAp
 
 import com.twiliovoicereactnative.CallRecordDatabase.CallRecord;
 
-import android.os.PowerManager;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -39,6 +38,9 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
       // <<< FORK
 
       getCallRecordDatabase().add(callRecord);
+      // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+      ForkIncomingCallCoordinator.onInvite(getVoiceServiceApi().getServiceContext(), callRecord);
+      // <<< FORK
       getVoiceServiceApi().incomingCall(callRecord);
       // >>> FORK KAR-492 — see ForkVoiceMessageGuard.java
       ForkVoiceMessageGuard.markPresented(payload, callInvite.getCallSid());
@@ -49,6 +51,10 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
     public void onCancelledCallInvite(@NonNull CancelledCallInvite cancelledCallInvite,
                                       @Nullable CallException callException) {
       logger.log(String.format("onCancelledCallInvite %s", cancelledCallInvite.getCallSid()));
+
+      // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+      ForkIncomingCallCoordinator.onCancelledInvite(cancelledCallInvite.getCallSid());
+      // <<< FORK
 
       // >>> FORK KAR-492 — see ForkCancelledInviteCleanup.java
       CallRecord callRecord = ForkCancelledInviteCleanup
@@ -78,19 +84,10 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
     logger.debug("Bundle data: " + remoteMessage.getData());
     logger.debug("From: " + remoteMessage.getFrom());
 
-    PowerManager pm = (PowerManager)getSystemService(POWER_SERVICE);
-    boolean isScreenOn = pm.isInteractive(); // check if screen is on
-    if (!isScreenOn) {
-      PowerManager.WakeLock wl = pm.newWakeLock(
-        PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
-        "VoiceFirebaseMessagingService:notificationLock");
-      wl.acquire(30000); //set your time in milliseconds
-    }
-
     // Check if message contains a data payload.
     if (!remoteMessage.getData().isEmpty()) {
-      // >>> FORK KAR-492 — see ForkVoiceMessageGuard.java
-      if (!ForkVoiceMessageGuard.handleNativeFcm(this, remoteMessage.getData())) {
+      // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+      if (!ForkIncomingCallCoordinator.handleNativeFcm(this, remoteMessage.getData())) {
       // <<< FORK
         logger.error("The message was not a valid Twilio Voice SDK payload: " +
           remoteMessage.getData());

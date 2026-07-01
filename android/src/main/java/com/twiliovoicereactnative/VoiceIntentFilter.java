@@ -8,9 +8,8 @@
 // (ACTION_VIEW) while the process is backgrounded. Forwarding those to
 // VoiceService.startService throws IllegalStateException /
 // ForegroundServiceStartNotAllowedException on Android 8+, and SecurityException
-// on some Samsung builds. Restrict forwarding to known voice actions, handle
-// full-screen UI launches in-process, and only absorb known platform start
-// failures.
+// on some Samsung builds. Restrict forwarding to known voice actions and only
+// absorb known platform start failures.
 package com.twiliovoicereactnative;
 
 import android.content.Context;
@@ -27,12 +26,6 @@ public final class VoiceIntentFilter {
     if (action.equals(Constants.ACTION_PUSH_APP_TO_FOREGROUND)) return;
     if (!isVoiceAction(action)) {
       logger.debug("filterAndForward: ignoring non-voice action=" + action);
-      return;
-    }
-    if (ForkFullScreenIncomingCall.ACTION.equals(action)) {
-      ForkFullScreenIncomingCall.onLaunched(
-        appContext,
-        ForkCallRecordLookup.getForFullScreenLaunch(intent));
       return;
     }
     Intent copied = new Intent(intent);
@@ -56,7 +49,6 @@ public final class VoiceIntentFilter {
       || Constants.ACTION_CANCEL_CALL.equals(action)
       || Constants.ACTION_CALL_DISCONNECT.equals(action)
       || Constants.ACTION_RAISE_OUTGOING_CALL_NOTIFICATION.equals(action)
-      || Constants.ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION.equals(action)
-      || ForkFullScreenIncomingCall.ACTION.equals(action);
+      || Constants.ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION.equals(action);
   }
 }
