@@ -119,9 +119,9 @@ class NotificationUtility {
       for (Map.Entry<String, String> e : twimlParams.entrySet()) {
         String paramKey = e.getKey();
         String paramValue = e.getValue();
-        processedTemplate = processedTemplate.replaceAll(
-          String.format("\\$\\{%s\\}", paramKey),
-          paramValue);
+        // >>> FORK KAR-687 — insert TwiML params literally; callerId may contain $1
+        processedTemplate = processedTemplate.replace("${" + paramKey + "}", paramValue);
+        // <<< FORK
       }
 
       return processedTemplate;
