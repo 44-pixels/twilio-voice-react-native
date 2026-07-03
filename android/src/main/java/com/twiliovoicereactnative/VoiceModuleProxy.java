@@ -116,9 +116,20 @@ class VoiceModuleProxy {
       return;
     }
 
-    this.audioSwitchManager.getAudioSwitch().selectDevice(audioDevice);
-
-    promise.resolve(null);
+    // >>> FORK KAR-443 — route Core Telecom calls through Telecom endpoint APIs
+    boolean handledByTelecom = ForkCallActionOrchestrator.selectAudioDevice(audioDevice, routed -> {
+      mainHandler.post(() -> {
+        if (!routed) {
+          this.audioSwitchManager.getAudioSwitch().selectDevice(audioDevice);
+        }
+        promise.resolve(null);
+      });
+    });
+    if (!handledByTelecom) {
+      this.audioSwitchManager.getAudioSwitch().selectDevice(audioDevice);
+      promise.resolve(null);
+    }
+    // <<< FORK
   }
 
 

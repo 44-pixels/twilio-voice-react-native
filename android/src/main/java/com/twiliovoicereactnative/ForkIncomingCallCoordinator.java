@@ -1,13 +1,10 @@
 // FORK — KAR-443
-// Owns: native incoming-call presentation lifecycle: wake screen for native FCM,
-// mirror Twilio call state into Android Telecom, and keep the full-screen
-// incoming-call Activity state-driven. Telecom owns system surfaces (call log,
-// headset/wear/auto controls); ForkIncomingCallActivity owns the phone lock-screen UX.
+// Owns: compatibility shim for older one-line hooks. All cross-system call
+// policy lives in ForkCallActionOrchestrator.
 // Hooks into: NativeFirebaseMessageHandler, VoiceFirebaseMessagingService,
 // VoiceService, and CallListenerProxy.
-// Re-check on SDK bump: CallInvite/CancelledCallInvite lifecycle ordering,
-// VoiceService accept/reject/cancel semantics, and CallListenerProxy terminal
-// callbacks.
+// Re-check on SDK bump: call lifecycle hook names; prefer wiring new hooks
+// directly to ForkCallActionOrchestrator.
 package com.twiliovoicereactnative;
 
 import android.content.Context;
@@ -24,50 +21,36 @@ final class ForkIncomingCallCoordinator {
 
   static boolean handleNativeFcm(@NonNull Context context,
                                  @Nullable Map<String, String> data) {
-    if (data == null || data.isEmpty()) return false;
-    if (ForkVoiceMessageGuard.shouldWakeForIncomingCall(context, data)) {
-      ForkIncomingCallWakeLock.acquireIfIncomingCall(context, data);
-    }
-    return ForkVoiceMessageGuard.handleNativeFcm(context, data);
+    return ForkCallActionOrchestrator.handleNativeFcm(context, data);
   }
 
   static void onInvite(@NonNull Context context,
                        @NonNull CallRecordDatabase.CallRecord callRecord) {
-    ForkTelecomManager.reportIncomingCall(context, callRecord);
+    ForkCallActionOrchestrator.incomingInvite(context, callRecord);
   }
 
   static void onCancelledInvite(@Nullable String callSid) {
-    ForkIncomingCallWakeLock.release();
-    ForkIncomingCallActivity.finishForCallSid(callSid);
-    ForkTelecomManager.cancelIncomingCall(callSid);
+    ForkCallActionOrchestrator.cancelledInvite(callSid);
   }
 
   static void onAnswered(@NonNull CallRecordDatabase.CallRecord callRecord) {
-    ForkIncomingCallWakeLock.release();
-    ForkIncomingCallActivity.finishFor(callRecord);
-    ForkTelecomManager.markAnswered(callRecord);
+    ForkCallActionOrchestrator.answerRequested(callRecord);
   }
 
   static void onRejected(@NonNull CallRecordDatabase.CallRecord callRecord) {
-    ForkIncomingCallWakeLock.release();
-    ForkIncomingCallActivity.finishFor(callRecord);
-    ForkTelecomManager.markRejected(callRecord);
+    ForkCallActionOrchestrator.rejectRequested(callRecord);
   }
 
   static void onCancelled(@NonNull CallRecordDatabase.CallRecord callRecord) {
-    ForkIncomingCallWakeLock.release();
-    ForkIncomingCallActivity.finishFor(callRecord);
-    ForkTelecomManager.cancelIncomingCall(callRecord.getCallSid());
+    ForkCallActionOrchestrator.cancelledBySystem(callRecord);
   }
 
   static void onConnected(@NonNull CallRecordDatabase.CallRecord callRecord) {
-    ForkTelecomManager.markActive(callRecord);
+    ForkCallActionOrchestrator.twilioConnected(callRecord);
   }
 
   static void onDisconnected(@NonNull CallRecordDatabase.CallRecord callRecord,
                              @Nullable CallException callException) {
-    ForkIncomingCallWakeLock.release();
-    ForkIncomingCallActivity.finishFor(callRecord);
-    ForkTelecomManager.markDisconnected(callRecord, callException);
+    ForkCallActionOrchestrator.twilioDisconnected(callRecord, callException);
   }
 }

@@ -267,10 +267,6 @@ public class VoiceService extends Service {
     VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().activate();
     // <<< FORK
 
-    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-    ForkIncomingCallCoordinator.onAnswered(callRecord);
-    // <<< FORK
-
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java (foreground-accept path; intent-gated path in VoiceActivityProxy doesn't fire here)
     ForkLockScreenFlags.applyForActiveCall();
     // <<< FORK
@@ -287,6 +283,11 @@ public class VoiceService extends Service {
         acceptOptions,
         new CallListenerProxy(callRecord.getUuid(), VoiceService.this)));
     callRecord.setCallInviteUsedState();
+
+    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
+    ForkIncomingCallCoordinator.onAnswered(callRecord);
+    // <<< FORK
+
     // >>> FORK KAR-492 — see ForkInvitePayloadStore.java / ForkVoiceMessageGuard.java
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
     ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());

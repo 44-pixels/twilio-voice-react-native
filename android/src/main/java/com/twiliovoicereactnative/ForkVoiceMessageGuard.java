@@ -107,15 +107,21 @@ public final class ForkVoiceMessageGuard {
                                        @NonNull Map<String, String> payload,
                                        @NonNull Source source) {
     TwilioMessage message = TwilioMessage.from(payload, null);
-    Decision decision = decide(context, message);
-    logDecision(source, message, decision.logName);
-    if (decision.skip) return true;
+    Decision decision;
+    synchronized (ForkVoiceMessageGuard.class) {
+      decision = decide(context, message);
+      logDecision(source, message, decision.logName);
+      if (decision.skip) return true;
+      claimForProcessing(context, message, source);
+    }
 
-    return Voice.handleMessage(
+    boolean handled = Voice.handleMessage(
       context.getApplicationContext(),
       payload,
       new VoiceFirebaseMessagingService.MessageHandler(payload),
       new CallMessageListenerProxy());
+    if (!handled) clearProcessingClaim(context, message);
+    return handled;
   }
 
   @NonNull
@@ -139,6 +145,29 @@ public final class ForkVoiceMessageGuard {
     }
 
     return Decision.PROCESS;
+  }
+
+  private static void claimForProcessing(@NonNull Context context,
+                                         @NonNull TwilioMessage message,
+                                         @NonNull Source source) {
+    if (!TYPE_CALL.equals(message.messageType) || message.messageId == null) return;
+
+    SharedPreferences prefs = prefs(context);
+    long nowMillis = System.currentTimeMillis();
+    if (!prefs.edit().putLong(MESSAGE_PREFIX + message.messageId, nowMillis).commit()) {
+      logger.warning("[FORK KAR-492] failed to claim messageId=" + message.messageId);
+      return;
+    }
+    logDecision(source, message, "claim_processing");
+  }
+
+  private static void clearProcessingClaim(@NonNull Context context,
+                                           @NonNull TwilioMessage message) {
+    if (!TYPE_CALL.equals(message.messageType) || message.messageId == null) return;
+    if (!prefs(context).edit().remove(MESSAGE_PREFIX + message.messageId).commit()) {
+      logger.warning("[FORK KAR-492] failed to clear message claim messageId="
+        + message.messageId);
+    }
   }
 
   private static boolean isFresh(@NonNull SharedPreferences prefs,

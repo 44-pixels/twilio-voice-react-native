@@ -12,6 +12,7 @@ import android.content.Intent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.twilio.audioswitch.AudioDevice;
 import com.twilio.voice.CallException;
 
 final class ForkTelecomManager {
@@ -47,6 +48,11 @@ final class ForkTelecomManager {
   static void markDisconnected(@NonNull CallRecordDatabase.CallRecord callRecord,
                                @Nullable CallException callException) {
     ForkCoreTelecomManager.markDisconnected(callRecord, callException);
+  }
+
+  static boolean selectAudioDevice(@NonNull AudioDevice audioDevice,
+                                   @NonNull ForkTelecomRouteCallback callback) {
+    return ForkCoreTelecomManager.selectAudioDevice(audioDevice, callback);
   }
 
   static void sendVoiceServiceAction(@NonNull Context context,
