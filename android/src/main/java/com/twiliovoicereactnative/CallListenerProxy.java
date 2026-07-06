@@ -23,7 +23,6 @@ import static com.twiliovoicereactnative.CommonConstants.CallEventPreviousWarnin
 import static com.twiliovoicereactnative.CommonConstants.CallEventConnectFailure;
 import static com.twiliovoicereactnative.CommonConstants.CallEventQualityWarningsChanged;
 import static com.twiliovoicereactnative.Constants.JS_EVENT_KEY_CALL_INFO;
-import static com.twiliovoicereactnative.VoiceApplicationProxy.getCallRecordDatabase;
 import static com.twiliovoicereactnative.VoiceApplicationProxy.getJSEventEmitter;
 import static com.twiliovoicereactnative.VoiceApplicationProxy.getAudioSwitchManager;
 import static com.twiliovoicereactnative.VoiceApplicationProxy.getMediaPlayerManager;
@@ -34,7 +33,6 @@ import static com.twiliovoicereactnative.ReactNativeArgumentsSerializer.*;
 import com.twiliovoicereactnative.CallRecordDatabase.CallRecord;
 
 import java.util.Date;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -57,7 +55,10 @@ class CallListenerProxy implements Call.Listener {
     getAudioSwitchManager().getAudioSwitch().deactivate();
 
     // find call record & remove
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().remove(new CallRecord(uuid)));
+    // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
+    CallRecord callRecord = ForkCallListenerRecordGuard.removeOrNull("onConnectFailure", uuid, call);
+    if (callRecord == null) return;
+    // <<< FORK
     // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
     ForkIncomingCallCoordinator.onDisconnected(callRecord, callException);
     // <<< FORK
@@ -78,7 +79,10 @@ class CallListenerProxy implements Call.Listener {
     debug("onRinging");
 
     // find call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().get(new CallRecord(uuid)));
+    // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
+    CallRecord callRecord = ForkCallListenerRecordGuard.getOrNull("onRinging", uuid, call);
+    if (callRecord == null) return;
+    // <<< FORK
     callRecord.setCall(call);
 
     // create notification & sound
@@ -99,7 +103,10 @@ class CallListenerProxy implements Call.Listener {
     debug("onConnected");
 
     // find call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().get(new CallRecord(uuid)));
+    // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
+    CallRecord callRecord = ForkCallListenerRecordGuard.getOrNull("onConnected", uuid, call);
+    if (callRecord == null) return;
+    // <<< FORK
     callRecord.setCall(call);
     callRecord.setTimestamp(new Date());
     getMediaPlayerManager().stop();
@@ -119,7 +126,10 @@ class CallListenerProxy implements Call.Listener {
     debug("onReconnecting");
 
     // find & update call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().get(new CallRecord(uuid)));
+    // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
+    CallRecord callRecord = ForkCallListenerRecordGuard.getOrNull("onReconnecting", uuid, call);
+    if (callRecord == null) return;
+    // <<< FORK
 
     // notify JS layer
     sendJSEvent(
@@ -134,7 +144,10 @@ class CallListenerProxy implements Call.Listener {
     debug("onReconnected");
 
     // find & update call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().get(new CallRecord(uuid)));
+    // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
+    CallRecord callRecord = ForkCallListenerRecordGuard.getOrNull("onReconnected", uuid, call);
+    if (callRecord == null) return;
+    // <<< FORK
 
     // notify JS layer
     sendJSEvent(
@@ -148,7 +161,10 @@ class CallListenerProxy implements Call.Listener {
     debug("onDisconnected");
 
     // find & remove call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().remove(new CallRecord(uuid)));
+    // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
+    CallRecord callRecord = ForkCallListenerRecordGuard.removeOrNull("onDisconnected", uuid, call);
+    if (callRecord == null) return;
+    // <<< FORK
     // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
     ForkIncomingCallCoordinator.onDisconnected(callRecord, callException);
     // <<< FORK
@@ -174,7 +190,10 @@ class CallListenerProxy implements Call.Listener {
     debug("onCallQualityWarningsChanged");
 
     // find call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().get(new CallRecord(uuid)));
+    // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
+    CallRecord callRecord = ForkCallListenerRecordGuard.getOrNull("onCallQualityWarningsChanged", uuid, call);
+    if (callRecord == null) return;
+    // <<< FORK
 
     // notify JS layer
     sendJSEvent(

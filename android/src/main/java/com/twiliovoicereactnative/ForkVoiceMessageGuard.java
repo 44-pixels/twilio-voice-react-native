@@ -132,7 +132,7 @@ public final class ForkVoiceMessageGuard {
     long nowMillis = System.currentTimeMillis();
     prune(prefs, nowMillis);
 
-    if (TYPE_CALL.equals(message.messageType)
+    if ((TYPE_CALL.equals(message.messageType) || TYPE_CANCEL.equals(message.messageType))
       && message.callSid != null
       && isFresh(prefs, SETTLED_PREFIX + message.callSid, nowMillis)) {
       return Decision.SKIP_SETTLED;
