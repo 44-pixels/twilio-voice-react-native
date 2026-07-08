@@ -20,7 +20,9 @@ import com.twilio.audioswitch.AudioDevice
 import com.twilio.voice.CallException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -39,6 +41,8 @@ internal object ForkCoreTelecomManager {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val calls = ConcurrentHashMap<UUID, CallControlScope>()
   private val callsBySid = ConcurrentHashMap<String, CallControlScope>()
+  private val endpointsByCall = ConcurrentHashMap<UUID, List<CallEndpointCompat>>()
+  private val endpointCollectionJobs = ConcurrentHashMap<UUID, Job>()
   private val pendingCallSids = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
   private val telecomAnswerRequests = Collections.newSetFromMap(ConcurrentHashMap<UUID, Boolean>())
   private val telecomDisconnectRequests = Collections.newSetFromMap(ConcurrentHashMap<UUID, Boolean>())
@@ -60,7 +64,12 @@ internal object ForkCoreTelecomManager {
       return
     }
 
-    val callSid = callRecord.callSid
+    val callSid = callSidFor(callRecord)
+    if (callSid == null) {
+      logger.warning("Core Telecom incoming call missing SID; using notification-only incoming call path")
+      clearPendingState(callRecord)
+      return
+    }
     if (!pendingCallSids.add(callSid)) {
       logger.debug("reportIncomingCall: already reporting Core Telecom call $callSid")
       return
@@ -109,7 +118,8 @@ internal object ForkCoreTelecomManager {
           onSetInactive = {},
         ) {
           calls[callRecord.uuid] = this
-          callsBySid[callRecord.callSid] = this
+          associateCallSid(callRecord, this)
+          collectAvailableEndpoints(callRecord, this)
           logger.log("reported incoming call to Core Telecom ${callRecord.callSid}")
           drainPendingState(callRecord, this)
         }
@@ -117,8 +127,9 @@ internal object ForkCoreTelecomManager {
         logger.warning(error, "Core Telecom incoming call report failed")
       } finally {
         calls.remove(callRecord.uuid)
-        callsBySid.remove(callRecord.callSid)
-        pendingCallSids.remove(callRecord.callSid)
+        clearAvailableEndpoints(callRecord)
+        removeCallSid(callRecord)
+        removePendingCallSid(callRecord)
         telecomAnswerRequests.remove(callRecord.uuid)
         telecomDisconnectRequests.remove(callRecord.uuid)
         appAnswerRequests.remove(callRecord.uuid)
@@ -145,7 +156,7 @@ internal object ForkCoreTelecomManager {
 
     val control = controlFor(callRecord)
     if (control == null) {
-      if (pendingCallSids.contains(callRecord.callSid)) {
+      if (hasPendingCallSid(callRecord)) {
         logger.debug("markAnswered: queued until Core Telecom call is ready ${callRecord.uuid}")
         appAnswerRequests.add(callRecord.uuid)
       }
@@ -159,7 +170,7 @@ internal object ForkCoreTelecomManager {
   fun markActive(callRecord: CallRecordDatabase.CallRecord) {
     val control = controlFor(callRecord)
     if (control == null) {
-      if (pendingCallSids.contains(callRecord.callSid)) {
+      if (hasPendingCallSid(callRecord)) {
         if (appAnswerRequests.contains(callRecord.uuid)) {
           logger.debug("markActive: covered by pending answer ${callRecord.uuid}")
           return
@@ -204,9 +215,10 @@ internal object ForkCoreTelecomManager {
 
     scope.launch {
       try {
-        val endpoints = withTimeoutOrNull(ENDPOINT_WAIT_TIMEOUT_MILLIS) {
-          control.availableEndpoints.first()
-        }
+        val endpoints = endpointsByCall.values.firstOrNull()
+          ?: withTimeoutOrNull(ENDPOINT_WAIT_TIMEOUT_MILLIS) {
+            control.availableEndpoints.first()
+          }
         val endpoint = endpoints?.firstOrNull { endpoint -> endpoint.type == endpointType }
         if (endpoint == null) {
           logger.warning("Core Telecom endpoint unavailable for type $endpointType")
@@ -264,6 +276,27 @@ internal object ForkCoreTelecomManager {
     }
   }
 
+  private fun collectAvailableEndpoints(
+    callRecord: CallRecordDatabase.CallRecord,
+    control: CallControlScope,
+  ) {
+    val uuid = callRecord.uuid
+    if (uuid == null) return
+
+    endpointCollectionJobs.remove(uuid)?.cancel()
+    endpointCollectionJobs[uuid] = scope.launch {
+      control.availableEndpoints.collect { endpoints ->
+        endpointsByCall[uuid] = endpoints
+      }
+    }
+  }
+
+  private fun clearAvailableEndpoints(callRecord: CallRecordDatabase.CallRecord) {
+    val uuid = callRecord.uuid ?: return
+    endpointsByCall.remove(uuid)
+    endpointCollectionJobs.remove(uuid)?.cancel()
+  }
+
   private suspend fun answerFromApp(
     callRecord: CallRecordDatabase.CallRecord,
     control: CallControlScope,
@@ -303,7 +336,7 @@ internal object ForkCoreTelecomManager {
     if (telecomDisconnectRequests.remove(callRecord.uuid)) return
     val control = controlFor(callRecord)
     if (control == null) {
-      if (pendingCallSids.contains(callRecord.callSid)) {
+      if (hasPendingCallSid(callRecord)) {
         logger.debug("disconnect: queued until Core Telecom call is ready ${callRecord.uuid}")
         appDisconnectRequests[callRecord.uuid] = cause
       } else {
@@ -336,8 +369,9 @@ internal object ForkCoreTelecomManager {
 
   private fun clearCallState(callRecord: CallRecordDatabase.CallRecord) {
     calls.remove(callRecord.uuid)
-    callsBySid.remove(callRecord.callSid)
-    pendingCallSids.remove(callRecord.callSid)
+    clearAvailableEndpoints(callRecord)
+    removeCallSid(callRecord)
+    removePendingCallSid(callRecord)
     telecomAnswerRequests.remove(callRecord.uuid)
     clearPendingState(callRecord)
   }
@@ -348,8 +382,42 @@ internal object ForkCoreTelecomManager {
     appDisconnectRequests.remove(callRecord.uuid)
   }
 
-  private fun controlFor(callRecord: CallRecordDatabase.CallRecord): CallControlScope? =
-    calls[callRecord.uuid] ?: callsBySid[callRecord.callSid]
+  private fun controlFor(callRecord: CallRecordDatabase.CallRecord): CallControlScope? {
+    val uuid = callRecord.uuid
+    val controlByUuid = if (uuid == null) null else calls[uuid]
+    if (controlByUuid != null) return controlByUuid
+
+    val callSid = callSidFor(callRecord) ?: return null
+    return callsBySid[callSid]
+  }
+
+  private fun associateCallSid(
+    callRecord: CallRecordDatabase.CallRecord,
+    control: CallControlScope,
+  ) {
+    val callSid = callSidFor(callRecord) ?: return
+    callsBySid[callSid] = control
+  }
+
+  private fun removeCallSid(callRecord: CallRecordDatabase.CallRecord) {
+    val callSid = callSidFor(callRecord) ?: return
+    callsBySid.remove(callSid)
+  }
+
+  private fun hasPendingCallSid(callRecord: CallRecordDatabase.CallRecord): Boolean {
+    val callSid = callSidFor(callRecord) ?: return false
+    return pendingCallSids.contains(callSid)
+  }
+
+  private fun removePendingCallSid(callRecord: CallRecordDatabase.CallRecord) {
+    val callSid = callSidFor(callRecord) ?: return
+    pendingCallSids.remove(callSid)
+  }
+
+  private fun callSidFor(callRecord: CallRecordDatabase.CallRecord): String? {
+    val callSid = callRecord.callSid
+    return if (callSid.isNullOrEmpty()) null else callSid
+  }
 
   private fun disconnectAction(callRecord: CallRecordDatabase.CallRecord): String =
     if (callRecord.voiceCall == null) Constants.ACTION_REJECT_CALL else Constants.ACTION_CALL_DISCONNECT

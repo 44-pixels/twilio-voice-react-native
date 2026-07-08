@@ -1,9 +1,5 @@
 package com.twiliovoicereactnative;
 
-import android.os.Handler;
-import android.os.Looper;
-
-import com.facebook.react.bridge.ReactApplicationContext;
 import com.twilio.voice.PreflightTest;
 
 import java.util.UUID;
@@ -11,8 +7,6 @@ import java.util.function.Function;
 
 class PreflightTestModuleProxy {
   private static final SDKLog logger = new SDKLog(PreflightTestModuleProxy.class);
-
-  private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
   private void getPreflightTest(
     String uuidStr,
@@ -38,7 +32,7 @@ class PreflightTestModuleProxy {
       return;
     }
 
-    mainHandler.post(() -> {
+    ForkTwilioVoiceThread.run(() -> {
       logger.debug(String.format(".getPreflightRecord(%s) > runnable", uuidStr));
       final Object result = onSuccess.apply(record.getPreflightTest());
       promise.resolve(result);

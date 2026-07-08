@@ -59,8 +59,8 @@ class CallListenerProxy implements Call.Listener {
     CallRecord callRecord = ForkCallListenerRecordGuard.removeOrNull("onConnectFailure", uuid, call);
     if (callRecord == null) return;
     // <<< FORK
-    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-    ForkIncomingCallCoordinator.onDisconnected(callRecord, callException);
+    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+    ForkCallLifecycleCoordinator.twilioDisconnected(callRecord, callException);
     // <<< FORK
 
     // take down notification
@@ -84,6 +84,9 @@ class CallListenerProxy implements Call.Listener {
     if (callRecord == null) return;
     // <<< FORK
     callRecord.setCall(call);
+    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+    ForkCallLifecycleCoordinator.twilioRinging(callRecord);
+    // <<< FORK
 
     // create notification & sound
     callRecord.setNotificationId(NotificationUtility.createNotificationIdentifier());
@@ -110,8 +113,8 @@ class CallListenerProxy implements Call.Listener {
     callRecord.setCall(call);
     callRecord.setTimestamp(new Date());
     getMediaPlayerManager().stop();
-    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-    ForkIncomingCallCoordinator.onConnected(callRecord);
+    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+    ForkCallLifecycleCoordinator.twilioConnected(callRecord);
     // <<< FORK
 
     // notify JS layer
@@ -165,8 +168,8 @@ class CallListenerProxy implements Call.Listener {
     CallRecord callRecord = ForkCallListenerRecordGuard.removeOrNull("onDisconnected", uuid, call);
     if (callRecord == null) return;
     // <<< FORK
-    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-    ForkIncomingCallCoordinator.onDisconnected(callRecord, callException);
+    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+    ForkCallLifecycleCoordinator.twilioDisconnected(callRecord, callException);
     // <<< FORK
 
     // stop audio & cancel notification
