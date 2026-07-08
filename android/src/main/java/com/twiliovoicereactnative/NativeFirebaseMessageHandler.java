@@ -3,7 +3,7 @@
 // Hooks into: host app FirebaseMessagingService implementations that need to
 // route Twilio Voice payloads before RN/JS startup.
 // Re-check on SDK bump: VoiceFirebaseMessagingService.MessageHandler still
-// owns CallInvite/CancelledCallInvite handling, ForkIncomingCallCoordinator
+// owns CallInvite/CancelledCallInvite handling, ForkCallLifecycleCoordinator
 // still wakes incoming calls before Voice.handleMessage, and Twilio call
 // payloads still carry twi_message_type=twilio.voice.call.
 package com.twiliovoicereactnative;
@@ -36,8 +36,8 @@ public final class NativeFirebaseMessageHandler {
 
   public static boolean handle(@NonNull Context context,
                                @Nullable Map<String, String> data) {
-    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-    return ForkIncomingCallCoordinator.handleNativeFcm(context, data);
+    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+    return ForkCallLifecycleCoordinator.handleNativeFcm(context, data);
     // <<< FORK
   }
 }

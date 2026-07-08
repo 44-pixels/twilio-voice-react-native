@@ -115,11 +115,11 @@ public final class ForkVoiceMessageGuard {
       claimForProcessing(context, message, source);
     }
 
-    boolean handled = Voice.handleMessage(
+    boolean handled = ForkTwilioVoiceThread.callBlocking(() -> Voice.handleMessage(
       context.getApplicationContext(),
       payload,
       new VoiceFirebaseMessagingService.MessageHandler(payload),
-      new CallMessageListenerProxy());
+      new CallMessageListenerProxy()));
     if (!handled) clearProcessingClaim(context, message);
     return handled;
   }

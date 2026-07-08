@@ -1,8 +1,5 @@
 package com.twiliovoicereactnative;
 
-import android.os.Handler;
-import android.os.Looper;
-
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.twilio.voice.CallMessage;
 
@@ -11,8 +8,6 @@ import java.util.UUID;
 
 class CallInviteModuleProxy {
   private static final SDKLog logger = new SDKLog(CallInviteModuleProxy.class);
-
-  private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
   private final ReactApplicationContext reactApplicationContext;
 
@@ -40,7 +35,7 @@ class CallInviteModuleProxy {
       return;
     }
 
-    mainHandler.post(() -> {
+    ForkTwilioVoiceThread.run(() -> {
       logger.debug(String.format(".getCallRecord(%s) > runnable", uuid));
       onSuccess.accept(callRecord);
     });

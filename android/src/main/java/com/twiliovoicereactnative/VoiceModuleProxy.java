@@ -1,8 +1,5 @@
 package com.twiliovoicereactnative;
 
-import android.os.Handler;
-import android.os.Looper;
-
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.WritableArray;
@@ -24,8 +21,6 @@ import java.util.UUID;
 class VoiceModuleProxy {
   private final SDKLog logger = new SDKLog(VoiceModuleProxy.class);
 
-  private final Handler mainHandler = new Handler(Looper.getMainLooper());
-
   private final ReactApplicationContext reactApplicationContext;
 
   private final AudioSwitchManager audioSwitchManager;
@@ -46,7 +41,7 @@ class VoiceModuleProxy {
   ) {
     logger.debug(".connect()");
 
-    this.mainHandler.post(() -> {
+    ForkTwilioVoiceThread.run(() -> {
       logger.debug(".connect() > runnable");
 
       // connect & create call record
@@ -79,6 +74,10 @@ class VoiceModuleProxy {
         );
 
         VoiceApplicationProxy.getCallRecordDatabase().add(callRecord);
+
+        // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+        ForkCallLifecycleCoordinator.outgoingConnecting(callRecord);
+        // <<< FORK
 
         // notify JS layer
         final WritableMap jsCall = ReactNativeArgumentsSerializer.serializeCall(callRecord);
@@ -116,9 +115,9 @@ class VoiceModuleProxy {
       return;
     }
 
-    // >>> FORK KAR-443 — route Core Telecom calls through Telecom endpoint APIs
-    boolean handledByTelecom = ForkCallActionOrchestrator.selectAudioDevice(audioDevice, routed -> {
-      mainHandler.post(() -> {
+    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+    boolean handledByTelecom = ForkCallLifecycleCoordinator.selectAudioDevice(audioDevice, routed -> {
+      ForkTwilioVoiceThread.run(() -> {
         if (!routed) {
           this.audioSwitchManager.getAudioSwitch().selectDevice(audioDevice);
         }
@@ -136,7 +135,7 @@ class VoiceModuleProxy {
   public void getCalls(ModuleProxy.UniversalPromise promise) {
     logger.debug(".getCalls()");
 
-    mainHandler.post(() -> {
+    ForkTwilioVoiceThread.run(() -> {
       logger.debug(".getCalls() > runnable");
 
       WritableArray callInfos = Arguments.createArray();
@@ -158,7 +157,7 @@ class VoiceModuleProxy {
   public void getCallInvites(ModuleProxy.UniversalPromise promise) {
     logger.debug(".getCallInvites()");
 
-    mainHandler.post(() -> {
+    ForkTwilioVoiceThread.run(() -> {
       logger.debug(".getCallInvites() > runnable");
 
       WritableArray callInviteInfos = Arguments.createArray();
@@ -209,13 +208,13 @@ class VoiceModuleProxy {
 
   public void getVersion(ModuleProxy.UniversalPromise promise) {
     logger.debug(".getVersion()");
-    promise.resolve(Voice.getVersion());
+    ForkTwilioVoiceThread.run(() -> promise.resolve(Voice.getVersion()));
   }
 
   public void handleEvent(Map<String, String> eventData, ModuleProxy.UniversalPromise promise) {
     logger.debug(".handleEvent()");
 
-    mainHandler.post(() -> {
+    ForkTwilioVoiceThread.run(() -> {
       logger.debug(".handleEvent() > runnable");
 
       // validate embedded firebase module is disabled
@@ -238,7 +237,7 @@ class VoiceModuleProxy {
   public void register(String token, ModuleProxy.UniversalPromise promise) {
     logger.debug(".register()");
 
-    this.mainHandler.post(() -> {
+    ForkTwilioVoiceThread.run(() -> {
       logger.debug(".register() > runnable");
 
       FirebaseMessaging.getInstance().getToken()
@@ -264,7 +263,8 @@ class VoiceModuleProxy {
           // Log and toast
           logger.debug("Registering with FCM with token " + fcmToken);
           RegistrationListener registrationListener = RegistrationListenerProxy.createRegistrationListener(this.reactApplicationContext, promise);
-          Voice.register(token, Voice.RegistrationChannel.FCM, fcmToken, registrationListener);
+          ForkTwilioVoiceThread.run(
+            () -> Voice.register(token, Voice.RegistrationChannel.FCM, fcmToken, registrationListener));
         });
     });
   }
@@ -272,26 +272,26 @@ class VoiceModuleProxy {
   public void runPreflight(PreflightOptions preflightOptions, ModuleProxy.UniversalPromise promise) {
     final UUID uuid = UUID.randomUUID();
 
-    final PreflightTestRecordDatabase.PreflightTestRecord existingPreflightTest = VoiceApplicationProxy
-      .getPreflightTestRecordDatabase()
-      .getRecord();
+    ForkTwilioVoiceThread.run(() -> {
+      final PreflightTestRecordDatabase.PreflightTestRecord existingPreflightTest = VoiceApplicationProxy
+        .getPreflightTestRecordDatabase()
+        .getRecord();
 
-    if (existingPreflightTest != null) {
-      logger.debug(String.format("existing preflight test: \"%s\"", existingPreflightTest.getUuid()));
-      switch (existingPreflightTest.getPreflightTest().getState()) {
-        case CONNECTED, CONNECTING -> {
-          promise.rejectWithName(
-            CommonConstants.ErrorCodeInvalidStateError,
-            "Cannot start a PreflightTest while one exists in-progress."
-          );
-          return;
+      if (existingPreflightTest != null) {
+        logger.debug(String.format("existing preflight test: \"%s\"", existingPreflightTest.getUuid()));
+        switch (existingPreflightTest.getPreflightTest().getState()) {
+          case CONNECTED, CONNECTING -> {
+            promise.rejectWithName(
+              CommonConstants.ErrorCodeInvalidStateError,
+              "Cannot start a PreflightTest while one exists in-progress."
+            );
+            return;
+          }
         }
+      } else {
+        logger.debug("no existing preflight test");
       }
-    } else {
-      logger.debug("no existing preflight test");
-    }
 
-    mainHandler.post(() -> {
       final PreflightTest preflightTest = Voice.runPreflight(
         this.reactApplicationContext,
         preflightOptions,
@@ -313,7 +313,7 @@ class VoiceModuleProxy {
   public void unregister(String token, ModuleProxy.UniversalPromise promise) {
     logger.debug(".unregister()");
 
-    mainHandler.post(() -> {
+    ForkTwilioVoiceThread.run(() -> {
       logger.debug(".unregister() > runnable");
 
       FirebaseMessaging.getInstance().getToken()
@@ -340,7 +340,8 @@ class VoiceModuleProxy {
           // Log and toast
           logger.debug("Registering with FCM with token " + fcmToken);
           UnregistrationListener unregistrationListener = RegistrationListenerProxy.createUnregistrationListener(this.reactApplicationContext, promise);
-          Voice.unregister(token, Voice.RegistrationChannel.FCM, fcmToken, unregistrationListener);
+          ForkTwilioVoiceThread.run(
+            () -> Voice.unregister(token, Voice.RegistrationChannel.FCM, fcmToken, unregistrationListener));
         });
     });
   }

@@ -105,7 +105,7 @@ public final class ForkRejectCallAction {
     VoiceService.removeForegroundNotificationIfRunning();
     VoiceApplicationProxy.getMediaPlayerManager().stop();
     VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
-    ForkIncomingCallCoordinator.onRejected(callRecord);
+    ForkCallLifecycleCoordinator.rejectRequested(callRecord);
 
     if (callRecord.getCallInvite() == null) {
       logger.warning("Decline action found CallRecord without CallInvite " + callRecord.getUuid());
@@ -116,7 +116,8 @@ public final class ForkRejectCallAction {
       return;
     }
 
-    callRecord.getCallInvite().reject(context.getApplicationContext());
+    ForkTwilioVoiceThread.runBlocking(
+      () -> callRecord.getCallInvite().reject(context.getApplicationContext()));
     callRecord.setCallInviteUsedState();
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
     ForkNotificationIdentity.cancelForCallSid(context, callRecord.getCallSid());

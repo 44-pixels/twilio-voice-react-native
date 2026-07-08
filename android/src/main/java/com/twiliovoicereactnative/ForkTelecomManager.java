@@ -2,8 +2,8 @@
 // Owns: Java-facing boundary for Android Telecom call lifecycle mirroring via
 // Jetpack Core-Telecom. Keeps fork Java code away from Core-Telecom/Kotlin API
 // details and centralizes fallback dispatch into VoiceService.
-// Hooks into: VoiceFirebaseMessagingService, VoiceService, CallListenerProxy, app.plugin.js.
-// Re-check on SDK bump: incoming invite lifecycle and VoiceService action names.
+// Hooks into: ForkCallLifecycleCoordinator and app.plugin.js.
+// Re-check on SDK bump: Core-Telecom mirroring lifecycle and VoiceService action names.
 package com.twiliovoicereactnative;
 
 import android.content.Context;

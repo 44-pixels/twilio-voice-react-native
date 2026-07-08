@@ -38,8 +38,8 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
       // <<< FORK
 
       getCallRecordDatabase().add(callRecord);
-      // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-      ForkIncomingCallCoordinator.onInvite(getVoiceServiceApi().getServiceContext(), callRecord);
+      // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+      ForkCallLifecycleCoordinator.incomingInvite(getVoiceServiceApi().getServiceContext(), callRecord);
       // <<< FORK
       getVoiceServiceApi().incomingCall(callRecord);
       // >>> FORK KAR-492 — see ForkVoiceMessageGuard.java
@@ -52,8 +52,8 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
                                       @Nullable CallException callException) {
       logger.log(String.format("onCancelledCallInvite %s", cancelledCallInvite.getCallSid()));
 
-      // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-      ForkIncomingCallCoordinator.onCancelledInvite(cancelledCallInvite.getCallSid());
+      // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+      ForkCallLifecycleCoordinator.cancelledInvite(cancelledCallInvite.getCallSid());
       // <<< FORK
 
       // >>> FORK KAR-492 — see ForkCancelledInviteCleanup.java
@@ -86,8 +86,8 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
 
     // Check if message contains a data payload.
     if (!remoteMessage.getData().isEmpty()) {
-      // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-      if (!ForkIncomingCallCoordinator.handleNativeFcm(this, remoteMessage.getData())) {
+      // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+      if (!ForkCallLifecycleCoordinator.handleNativeFcm(this, remoteMessage.getData())) {
       // <<< FORK
         logger.error("The message was not a valid Twilio Voice SDK payload: " +
           remoteMessage.getData());

@@ -27,7 +27,8 @@ class ModuleProxy {
 
     System.setProperty(Constants.GLOBAL_ENV, CommonConstants.ReactNativeVoiceSDK);
     System.setProperty(Constants.SDK_VERSION, CommonConstants.ReactNativeVoiceSDKVer);
-    Voice.setLogLevel(BuildConfig.DEBUG ? LogLevel.DEBUG : LogLevel.ERROR);
+    ForkTwilioVoiceThread.runBlocking(
+      () -> Voice.setLogLevel(BuildConfig.DEBUG ? LogLevel.DEBUG : LogLevel.ERROR));
 
     VoiceApplicationProxy.getJSEventEmitter().setContext(reactApplicationContext);
 

@@ -68,7 +68,8 @@ public class VoiceService extends Service {
     public Call connect(@NonNull ConnectOptions cxnOptions,
                         @NonNull Call.Listener listener) {
       logger.debug("connect");
-      return Voice.connect(VoiceService.this, cxnOptions, listener);
+      return ForkTwilioVoiceThread.callValueBlocking(
+        () -> Voice.connect(VoiceService.this, cxnOptions, listener));
     }
     public void disconnect(final CallRecordDatabase.CallRecord callRecord) {
       VoiceService.this.disconnect(callRecord);
@@ -183,7 +184,8 @@ public class VoiceService extends Service {
   private void disconnect(final CallRecordDatabase.CallRecord callRecord) {
     logger.debug("disconnect");
     if (null != callRecord) {
-      Objects.requireNonNull(callRecord.getVoiceCall()).disconnect();
+      ForkTwilioVoiceThread.runBlocking(
+        () -> Objects.requireNonNull(callRecord.getVoiceCall()).disconnect());
     } else {
       logger.warning("No call record found");
     }
@@ -277,15 +279,15 @@ public class VoiceService extends Service {
       .callMessageListener(new CallMessageListenerProxy())
       .build();
 
-    callRecord.setCall(
+    ForkTwilioVoiceThread.runBlocking(() -> callRecord.setCall(
       callRecord.getCallInvite().accept(
         VoiceService.this,
         acceptOptions,
-        new CallListenerProxy(callRecord.getUuid(), VoiceService.this)));
+        new CallListenerProxy(callRecord.getUuid(), VoiceService.this))));
     callRecord.setCallInviteUsedState();
 
-    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-    ForkIncomingCallCoordinator.onAnswered(callRecord);
+    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+    ForkCallLifecycleCoordinator.answerRequested(callRecord);
     // <<< FORK
 
     // >>> FORK KAR-492 — see ForkInvitePayloadStore.java / ForkVoiceMessageGuard.java
@@ -332,12 +334,12 @@ public class VoiceService extends Service {
     VoiceApplicationProxy.getMediaPlayerManager().stop();
     VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
 
-    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-    ForkIncomingCallCoordinator.onRejected(callRecord);
+    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+    ForkCallLifecycleCoordinator.rejectRequested(callRecord);
     // <<< FORK
 
     // reject call
-    callRecord.getCallInvite().reject(VoiceService.this);
+    ForkTwilioVoiceThread.runBlocking(() -> callRecord.getCallInvite().reject(VoiceService.this));
     callRecord.setCallInviteUsedState();
     // >>> FORK KAR-492 — see ForkInvitePayloadStore.java / ForkVoiceMessageGuard.java
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
@@ -376,8 +378,8 @@ public class VoiceService extends Service {
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java
     ForkLockScreenFlags.clearForEndedCall();
     // <<< FORK
-    // >>> FORK KAR-443 — see ForkIncomingCallCoordinator.java
-    ForkIncomingCallCoordinator.onCancelled(callRecord);
+    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+    ForkCallLifecycleCoordinator.cancelledBySystem(callRecord);
     // <<< FORK
     // >>> FORK KAR-492 — see ForkInvitePayloadStore.java / ForkVoiceMessageGuard.java
     ForkInvitePayloadStore.clear(callRecord.getCallSid());

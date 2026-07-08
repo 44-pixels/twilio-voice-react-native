@@ -78,11 +78,11 @@ public final class ForkInvitePayloadStore {
     }
 
     logger.log("replaying invite payload for Decline");
-    boolean handled = Voice.handleMessage(
+    boolean handled = ForkTwilioVoiceThread.callBlocking(() -> Voice.handleMessage(
       context.getApplicationContext(),
       payload,
       new RejectingMessageListener(context.getApplicationContext(), actionKey, onComplete),
-      new CallMessageListenerProxy());
+      new CallMessageListenerProxy()));
     logger.log("Decline payload replay handled=" + handled);
     if (!handled) {
       logger.warning("reject invite payload was not a valid Twilio message");
