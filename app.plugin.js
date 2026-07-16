@@ -5,9 +5,11 @@ const fs = require('fs');
 const path = require('path');
 const {
   AndroidConfig,
+  IOSConfig,
   createRunOncePlugin,
   withAndroidManifest,
   withDangerousMod,
+  withXcodeProject,
 } = require('@expo/config-plugins');
 
 const pkg = require('./package.json');
@@ -27,6 +29,119 @@ const CALLBACK_ACTIVITY = 'com.twiliovoicereactnative.ForkCallBackActivity';
 const CALLBACK_ACTION = 'android.telecom.action.CALL_BACK';
 const CALLBACK_DEEPLINK_META_DATA =
   'com.twiliovoicereactnative.CALL_BACK_DEEPLINK_BASE_URL';
+// >>> FORK KAR-787 — see ForkCallSounds
+const CALL_SOUND_PREFIX = 'twilio_voice_call_sound_';
+const CALL_ENDED_PREFIX = 'twilio_voice_call_ended';
+const CALL_SOUND_CATALOG = 'twilio_voice_call_sounds.json';
+const IOS_CALL_SOUND_DIRECTORY = 'TwilioVoiceCallSounds';
+// <<< FORK
+
+// >>> FORK KAR-787 — see ForkCallSounds
+function soundSource(projectRoot, sound, description) {
+  if (!sound || typeof sound.source !== 'string' || sound.source.length === 0) {
+    throw new Error(`${description} requires a source`);
+  }
+  const source = path.resolve(projectRoot, sound.source);
+  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
+    throw new Error(`${description} source does not exist: ${sound.source}`);
+  }
+  const extension = path.extname(source).toLowerCase();
+  if (!extension) throw new Error(`${description} source requires a file extension`);
+  return {source, extension};
+}
+
+function callSounds(projectRoot, props) {
+  const configuration = props && props.callSounds ? props.callSounds : {};
+  const configuredRingtones = Array.isArray(configuration.ringtones)
+    ? configuration.ringtones
+    : [];
+  const ids = new Set();
+  let defaultRingtoneId = null;
+  const ringtones = configuredRingtones.map(sound => {
+    if (!sound || typeof sound.id !== 'string' || !/^[a-z][a-z0-9_]*$/.test(sound.id)) {
+      throw new Error('Each ringtone id must match /^[a-z][a-z0-9_]*$/');
+    }
+    if (ids.has(sound.id)) throw new Error(`Duplicate ringtone id "${sound.id}"`);
+    if (typeof sound.displayName !== 'string' || sound.displayName.length === 0) {
+      throw new Error(`Ringtone "${sound.id}" requires a displayName`);
+    }
+    if (sound.default !== undefined && typeof sound.default !== 'boolean') {
+      throw new Error(`Ringtone "${sound.id}" default must be a boolean`);
+    }
+    if (sound.default) {
+      if (defaultRingtoneId) {
+        throw new Error(
+          `Only one ringtone can be default: "${defaultRingtoneId}" and "${sound.id}"`
+        );
+      }
+      defaultRingtoneId = sound.id;
+    }
+    const {source, extension} = soundSource(
+      projectRoot,
+      sound,
+      `Ringtone "${sound.id}"`
+    );
+    ids.add(sound.id);
+    return {
+      id: sound.id,
+      displayName: sound.displayName,
+      isDefault: sound.default === true,
+      source,
+      fileName: `${CALL_SOUND_PREFIX}${sound.id}${extension}`,
+    };
+  });
+
+  let callEnded = null;
+  if (configuration.callEnded) {
+    const {source, extension} = soundSource(
+      projectRoot,
+      configuration.callEnded,
+      'Call-ended sound'
+    );
+    callEnded = {
+      source,
+      fileName: `${CALL_ENDED_PREFIX}${extension}`,
+    };
+  }
+  return {ringtones, callEnded};
+}
+
+function writeCallSoundCatalog(destination, sounds) {
+  const ringtones = sounds.ringtones.map(
+    ({id, displayName, isDefault, fileName}) => ({
+      id,
+      displayName,
+      isDefault,
+      fileName,
+    })
+  );
+  const callEnded = sounds.callEnded
+    ? {fileName: sounds.callEnded.fileName}
+    : null;
+  fs.writeFileSync(
+    destination,
+    `${JSON.stringify({ringtones, callEnded}, null, 2)}\n`
+  );
+}
+
+function replaceGeneratedCallSounds(directory, sounds, removeStaleSounds = true) {
+  fs.mkdirSync(directory, {recursive: true});
+  for (const fileName of fs.readdirSync(directory)) {
+    const isGeneratedSound = fileName.startsWith(CALL_SOUND_PREFIX)
+      || fileName.startsWith(CALL_ENDED_PREFIX);
+    if ((removeStaleSounds && isGeneratedSound) || fileName === CALL_SOUND_CATALOG) {
+      fs.rmSync(path.join(directory, fileName));
+    }
+  }
+  const files = sounds.callEnded
+    ? [...sounds.ringtones, sounds.callEnded]
+    : sounds.ringtones;
+  for (const sound of files) {
+    fs.copyFileSync(sound.source, path.join(directory, sound.fileName));
+  }
+  writeCallSoundCatalog(path.join(directory, CALL_SOUND_CATALOG), sounds);
+}
+// <<< FORK
 
 function javaPackagePath(packageName) {
   return packageName.split('.').join(path.sep);
@@ -209,7 +324,7 @@ function withTwilioVoiceFirebaseMessaging(config, props = {}) {
     return configWithManifest;
   });
 
-  return withDangerousMod(config, [
+  config = withDangerousMod(config, [
     'android',
     configWithDangerousMod => {
       const packageName =
@@ -236,6 +351,14 @@ function withTwilioVoiceFirebaseMessaging(config, props = {}) {
         generatedServiceSource(packageName)
       );
 
+      // >>> FORK KAR-787 — see ForkCallSounds
+      const sounds = callSounds(configWithDangerousMod.modRequest.projectRoot, props);
+      replaceGeneratedCallSounds(
+        path.join(projectRoot, 'app', 'src', 'main', 'res', 'raw'),
+        sounds
+      );
+      // <<< FORK
+
       const valuesDir = path.join(
         projectRoot,
         'app',
@@ -253,6 +376,55 @@ function withTwilioVoiceFirebaseMessaging(config, props = {}) {
       return configWithDangerousMod;
     },
   ]);
+
+  // >>> FORK KAR-787 — see ForkCallSounds
+  config = withDangerousMod(config, [
+    'ios',
+    configWithDangerousMod => {
+      const sounds = callSounds(configWithDangerousMod.modRequest.projectRoot, props);
+      replaceGeneratedCallSounds(
+        path.join(
+          configWithDangerousMod.modRequest.platformProjectRoot,
+          IOS_CALL_SOUND_DIRECTORY
+        ),
+        sounds,
+        false
+      );
+      return configWithDangerousMod;
+    },
+  ]);
+
+  config = withXcodeProject(config, configWithXcodeProject => {
+    const sounds = callSounds(configWithXcodeProject.modRequest.projectRoot, props);
+    const project = configWithXcodeProject.modResults;
+    IOSConfig.XcodeUtils.ensureGroupRecursively(
+      project,
+      IOS_CALL_SOUND_DIRECTORY
+    );
+    const target = project.getFirstTarget().uuid;
+    const callEndedResourceNames = sounds.callEnded
+      ? [sounds.callEnded.fileName]
+      : [];
+    const resourceNames = [
+      CALL_SOUND_CATALOG,
+      ...sounds.ringtones.map(sound => sound.fileName),
+      ...callEndedResourceNames,
+    ];
+
+    for (const resourceName of resourceNames) {
+      IOSConfig.XcodeUtils.addResourceFileToGroup({
+        filepath: `${IOS_CALL_SOUND_DIRECTORY}/${resourceName}`,
+        groupName: IOS_CALL_SOUND_DIRECTORY,
+        isBuildFile: true,
+        project,
+        targetUuid: target,
+      });
+    }
+    return configWithXcodeProject;
+  });
+  // <<< FORK
+
+  return config;
 }
 
 module.exports = createRunOncePlugin(

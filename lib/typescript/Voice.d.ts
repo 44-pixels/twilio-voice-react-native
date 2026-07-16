@@ -11,6 +11,7 @@ import { CallInvite } from './CallInvite';
 import type { TwilioError } from './error/TwilioError';
 import { PreflightTest } from './PreflightTest';
 import type { CallKit } from './type/CallKit';
+import type { CallSound } from './type/CallSound';
 import type { Uuid } from './type/common';
 /**
  * Defines strict typings for all events emitted by {@link (Voice:class)
@@ -395,6 +396,16 @@ export declare class Voice extends EventEmitter {
      *  - Rejects if the configuration is unable to be applied.
      */
     setCallKitConfiguration(configuration: CallKit.ConfigurationOptions): Promise<void>;
+    /** Persist and apply the native incoming and call-ended sound settings. */
+    setCallSoundSettings(settings: CallSound.Settings): Promise<void>;
+    /** Return the persisted native call-sound settings. */
+    getCallSoundSettings(): Promise<CallSound.Settings>;
+    /** Return selectable ringtones installed by the Expo config plugin. */
+    getAvailableRingtones(): Promise<CallSound.AvailableSound[]>;
+    /** Preview an installed ringtone. */
+    previewCallSound(soundId: string): Promise<void>;
+    /** Stop the active ringtone preview, if any. */
+    stopCallSoundPreview(): Promise<void>;
     /**
      * Set the native call contact handle template.
      *

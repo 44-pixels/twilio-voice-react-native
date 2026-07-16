@@ -7,6 +7,7 @@ import type { NativeCallInviteInfo } from './CallInvite';
 import type { Uuid } from './common';
 import type { RTCStats } from './RTCStats';
 import type { Constants } from '../constants';
+import type { CallSound } from './CallSound';
 export type NativePromiseResolution<T> = {
     [Constants.PromiseKeyStatus]: Constants.PromiseStatusValueResolved;
     [Constants.PromiseKeyValue]: T;
@@ -58,6 +59,11 @@ export interface TwilioVoiceReactNative extends NativeModulesStatic {
     voice_connect_ios(token: string, twimlParams: Record<string, any>, contactHandle: string): NativePromise<NativeCallInfo>;
     voice_initializePushRegistry(): NativePromise<void>;
     voice_setCallKitConfiguration(configuration: Record<string, any>): NativePromise<void>;
+    voice_setCallSoundSettings(ringtoneMode: CallSound.RingtoneSetting['mode'], ringtoneSoundId: string | undefined, callEndedMode: CallSound.CallEndedSetting['mode']): NativePromise<void>;
+    voice_getCallSoundSettings(): NativePromise<CallSound.Settings>;
+    voice_getAvailableRingtones(): NativePromise<CallSound.AvailableSound[]>;
+    voice_previewCallSound(soundId: string): NativePromise<void>;
+    voice_stopCallSoundPreview(): NativePromise<void>;
     voice_setIncomingCallContactHandleTemplate(template?: string): NativePromise<void>;
     voice_getAudioDevices(): NativePromise<NativeAudioDevicesInfo>;
     voice_getCalls(): NativePromise<NativeCallInfo[]>;

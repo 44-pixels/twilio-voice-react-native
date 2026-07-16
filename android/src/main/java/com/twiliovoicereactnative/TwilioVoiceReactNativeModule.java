@@ -448,6 +448,43 @@ public class TwilioVoiceReactNativeModule extends ReactContextBaseJavaModule {
     this.moduleProxy.voice.selectAudioDevice(uuid, new PromiseAdapter(promise));
   }
 
+  // >>> FORK KAR-787 — see ForkCallSounds.java
+  @ReactMethod
+  public void voice_setCallSoundSettings(
+    String ringtoneMode,
+    String ringtoneSoundId,
+    String callEndedMode,
+    Promise promise
+  ) {
+    ForkCallSounds.setSettings(
+      ringtoneMode,
+      ringtoneSoundId,
+      callEndedMode,
+      new PromiseAdapter(promise)
+    );
+  }
+
+  @ReactMethod
+  public void voice_getCallSoundSettings(Promise promise) {
+    ForkCallSounds.getSettings(new PromiseAdapter(promise));
+  }
+
+  @ReactMethod
+  public void voice_getAvailableRingtones(Promise promise) {
+    ForkCallSounds.getAvailableSounds(new PromiseAdapter(promise));
+  }
+
+  @ReactMethod
+  public void voice_previewCallSound(String soundId, Promise promise) {
+    ForkCallSounds.preview(soundId, new PromiseAdapter(promise));
+  }
+
+  @ReactMethod
+  public void voice_stopCallSoundPreview(Promise promise) {
+    ForkCallSounds.stopPreview(new PromiseAdapter(promise));
+  }
+  // <<< FORK
+
   @ReactMethod
   public void voice_setIncomingCallContactHandleTemplate(String template, Promise promise) {
     this.moduleProxy.voice.setIncomingCallContactHandleTemplate(template, new PromiseAdapter(promise));

@@ -25,6 +25,9 @@ export { IncomingCallMessage } from './CallMessage/IncomingCallMessage';
 export { OutgoingCallMessage } from './CallMessage/OutgoingCallMessage';
 export { CustomParameters } from './type/common';
 export { CallKit } from './type/CallKit';
+// >>> FORK KAR-787 — see type/CallSound.ts
+export { CallSound } from './type/CallSound';
+// <<< FORK
 export { RTCStats } from './type/RTCStats';
 export { PreflightTest } from './PreflightTest';
 

@@ -100,6 +100,16 @@ export const NativeModule = {
   voice_register: createMockWithResolvedValue(undefined),
   voice_selectAudioDevice: createMockWithResolvedValue(undefined),
   voice_setCallKitConfiguration: createMockWithResolvedValue(undefined),
+  // >>> FORK KAR-787 — see type/CallSound.ts
+  voice_setCallSoundSettings: createMockWithResolvedValue(undefined),
+  voice_getCallSoundSettings: createMockWithResolvedValue({
+    ringtone: {mode: 'default'},
+    callEnded: {mode: 'enabled'},
+  }),
+  voice_getAvailableRingtones: createMockWithResolvedValue([]),
+  voice_previewCallSound: createMockWithResolvedValue(undefined),
+  voice_stopCallSoundPreview: createMockWithResolvedValue(undefined),
+  // <<< FORK
   voice_showNativeAvRoutePicker: createMockWithResolvedValue(undefined),
   voice_setIncomingCallContactHandleTemplate:
     createMockWithResolvedValue(undefined),
