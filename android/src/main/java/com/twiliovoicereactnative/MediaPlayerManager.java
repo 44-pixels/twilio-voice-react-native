@@ -17,11 +17,17 @@ class MediaPlayerManager {
   private final SoundPool soundPool;
   private final Map<SoundTable, Integer> soundMap;
   private int activeStream;
+  // >>> FORK KAR-787 — see ForkCallSounds
+  private final Context context;
+  // <<< FORK
   // >>> FORK KAR-373 — see ForkRingerPool
   private final ForkRingerPool forkRinger;
   // <<< FORK
 
   MediaPlayerManager(Context context) {
+    // >>> FORK KAR-787 — see ForkCallSounds
+    this.context = context.getApplicationContext();
+    // <<< FORK
     soundPool = (new SoundPool.Builder())
       .setMaxStreams(2)
       .setAudioAttributes(
@@ -41,6 +47,9 @@ class MediaPlayerManager {
 
   public void play(final SoundTable sound) {
     if (sound == SoundTable.INCOMING) { forkRinger.play(); return; } // FORK KAR-373
+    // >>> FORK KAR-787 — see ForkCallSounds
+    if (sound == SoundTable.DISCONNECT && ForkCallSounds.handleCallEnded(context)) return;
+    // <<< FORK
     activeStream = soundPool.play(
       soundMap.get(sound),
       1.f,

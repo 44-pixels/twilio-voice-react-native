@@ -15,6 +15,7 @@ export { IncomingCallMessage } from './CallMessage/IncomingCallMessage';
 export { OutgoingCallMessage } from './CallMessage/OutgoingCallMessage';
 export { CustomParameters } from './type/common';
 export { CallKit } from './type/CallKit';
+export { CallSound } from './type/CallSound';
 export { RTCStats } from './type/RTCStats';
 export { PreflightTest } from './PreflightTest';
 import * as TwilioErrors from './error';

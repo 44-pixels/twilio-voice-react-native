@@ -10,6 +10,9 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
+// >>> FORK KAR-787 — see ForkCallSounds.h
+#import "ForkCallSounds.h"
+// <<< FORK
 // >>> FORK KAR-381 — see ForkE164.h
 #import "ForkE164.h"
 // <<< FORK
@@ -29,6 +32,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)initializeCallKitWithConfiguration:(NSDictionary *)configuration {
+    // >>> FORK KAR-787 — see ForkCallSounds
+    [ForkCallSounds rememberCallKitConfiguration:configuration];
+    // <<< FORK
     CXProviderConfiguration *callKitConfiguration = [CXProviderConfiguration new];
     
     if (configuration[kTwilioVoiceReactNativeCallKitMaximumCallGroups]) {
@@ -63,6 +69,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     if (configuration[kTwilioVoiceReactNativeCallKitRingtoneSound] && [configuration[kTwilioVoiceReactNativeCallKitRingtoneSound] isKindOfClass:[NSString class]]) {
         callKitConfiguration.ringtoneSound = configuration[kTwilioVoiceReactNativeCallKitRingtoneSound];
     }
+    // >>> FORK KAR-787 — see ForkCallSounds
+    callKitConfiguration.ringtoneSound = [ForkCallSounds ringtoneSoundOverridingDefault:callKitConfiguration.ringtoneSound];
+    // <<< FORK
     
     self.callKitProvider = [[CXProvider alloc] initWithConfiguration:callKitConfiguration];
     [self.callKitProvider setDelegate:self queue:nil];
@@ -387,6 +396,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)call:(TVOCall *)call didDisconnectWithError:(NSError *)error {
+    // >>> FORK KAR-787 — see ForkCallSounds
+    [ForkCallSounds playCallEndedSound];
+    // <<< FORK
     NSDictionary *messageBody = [NSDictionary dictionary];
     if (error) {
         messageBody = @{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventDisconnected,
@@ -413,6 +425,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)call:(TVOCall *)call didFailToConnectWithError:(NSError *)error {
+    // >>> FORK KAR-787 — see ForkCallSounds
+    [ForkCallSounds playCallEndedSound];
+    // <<< FORK
     [self sendEventWithName:kTwilioVoiceReactNativeScopeCall
                        body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventConnectFailure,
                               kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call],

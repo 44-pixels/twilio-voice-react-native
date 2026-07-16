@@ -13,6 +13,9 @@ import {
 } from '../error';
 import { IceTransportPolicy } from '../type/Ice';
 import { AudioCodecType } from '../type/AudioCodec';
+// >>> FORK KAR-787 — see type/CallSound.ts
+import type { CallSound } from '../type/CallSound';
+// <<< FORK
 import type { NativeVoiceEventType } from '../type/Voice';
 import * as PreflightTestOptionsModule from '../utility/preflightTestOptions';
 import { Voice } from '../Voice';
@@ -798,7 +801,59 @@ describe('Voice class', () => {
       });
     });
 
-    describe('.setCallKitConfiguration', () => {
+    // >>> FORK KAR-787 — see type/CallSound.ts
+  describe('call sound settings', () => {
+    const settings: CallSound.Settings = {
+      ringtone: {mode: 'bundled', soundId: 'classic'},
+      callEnded: {mode: 'disabled'},
+    };
+
+    it('persists settings through the native module', async () => {
+      const voice = new Voice();
+
+      await expect(voice.setCallSoundSettings(settings)).resolves.toBeUndefined();
+
+      expect(MockNativeModule.voice_setCallSoundSettings).toHaveBeenCalledWith(
+        'bundled',
+        'classic',
+        'disabled'
+      );
+    });
+
+    it('returns persisted settings', async () => {
+      MockNativeModule.voice_getCallSoundSettings.mockReturnValueOnce(
+        mockNativePromiseResolutionValue(settings)
+      );
+
+      await expect(new Voice().getCallSoundSettings()).resolves.toEqual(settings);
+    });
+
+    it('returns available sounds', async () => {
+      const sounds = [
+        {id: 'classic', displayName: 'Classic', isDefault: true},
+      ];
+      MockNativeModule.voice_getAvailableRingtones.mockReturnValueOnce(
+        mockNativePromiseResolutionValue(sounds)
+      );
+
+      await expect(new Voice().getAvailableRingtones()).resolves.toEqual(sounds);
+    });
+
+    it('starts and stops preview playback', async () => {
+      const voice = new Voice();
+
+      await voice.previewCallSound('classic');
+      await voice.stopCallSoundPreview();
+
+      expect(MockNativeModule.voice_previewCallSound).toHaveBeenCalledWith(
+        'classic'
+      );
+      expect(MockNativeModule.voice_stopCallSoundPreview).toHaveBeenCalled();
+    });
+  });
+  // <<< FORK
+
+  describe('.setCallKitConfiguration', () => {
       const mockConfig = {
         callKitIconTemplateImageData: 'foo',
         callKitIncludesCallsInRecents: true,

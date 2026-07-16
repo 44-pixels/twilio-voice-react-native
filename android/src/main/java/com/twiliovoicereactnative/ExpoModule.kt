@@ -392,6 +392,38 @@ class ExpoModule : Module() {
       this@ExpoModule.moduleProxy.voice.selectAudioDevice(uuid, PromiseAdapter(promise))
     }
 
+    // >>> FORK KAR-787 — see ForkCallSounds.java
+    AsyncFunction("voice_setCallSoundSettings") {
+      ringtoneMode: String,
+      ringtoneSoundId: String?,
+      callEndedMode: String,
+      promise: Promise ->
+
+      ForkCallSounds.setSettings(
+        ringtoneMode,
+        ringtoneSoundId,
+        callEndedMode,
+        PromiseAdapter(promise)
+      )
+    }
+
+    AsyncFunction("voice_getCallSoundSettings") { promise: Promise ->
+      ForkCallSounds.getSettings(PromiseAdapter(promise))
+    }
+
+    AsyncFunction("voice_getAvailableRingtones") { promise: Promise ->
+      ForkCallSounds.getAvailableSounds(PromiseAdapter(promise))
+    }
+
+    AsyncFunction("voice_previewCallSound") { soundId: String, promise: Promise ->
+      ForkCallSounds.preview(soundId, PromiseAdapter(promise))
+    }
+
+    AsyncFunction("voice_stopCallSoundPreview") { promise: Promise ->
+      ForkCallSounds.stopPreview(PromiseAdapter(promise))
+    }
+    // <<< FORK
+
     AsyncFunction("voice_setIncomingCallContactHandleTemplate") {
       template: String,
       promise: Promise ->

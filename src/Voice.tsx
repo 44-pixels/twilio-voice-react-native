@@ -24,6 +24,9 @@ import type { CustomParameters, Uuid } from './type/common';
 import type { NativeVoiceEvent, NativeVoiceEventType } from './type/Voice';
 import { validatePreflightOptions } from './utility/preflightTestOptions';
 import { settleNativePromise } from './utility/nativePromise';
+// >>> FORK KAR-787 — see type/CallSound.ts
+import type { CallSound } from './type/CallSound';
+// <<< FORK
 
 /**
  * Defines strict typings for all events emitted by {@link (Voice:class)
@@ -765,6 +768,43 @@ export class Voice extends EventEmitter {
         );
     }
   }
+
+  // >>> FORK KAR-787 — see type/CallSound.ts
+  /** Persist and apply the native incoming and call-ended sound settings. */
+  async setCallSoundSettings(settings: CallSound.Settings): Promise<void> {
+    const ringtoneSoundId =
+      settings.ringtone.mode === 'bundled'
+        ? settings.ringtone.soundId
+        : undefined;
+    await settleNativePromise(
+      NativeModule.voice_setCallSoundSettings(
+        settings.ringtone.mode,
+        ringtoneSoundId,
+        settings.callEnded.mode
+      )
+    );
+  }
+
+  /** Return the persisted native call-sound settings. */
+  async getCallSoundSettings(): Promise<CallSound.Settings> {
+    return settleNativePromise(NativeModule.voice_getCallSoundSettings());
+  }
+
+  /** Return sounds installed by the Expo config plugin. */
+  async getAvailableRingtones(): Promise<CallSound.AvailableSound[]> {
+    return settleNativePromise(NativeModule.voice_getAvailableRingtones());
+  }
+
+  /** Preview an installed call sound. */
+  async previewCallSound(soundId: string): Promise<void> {
+    await settleNativePromise(NativeModule.voice_previewCallSound(soundId));
+  }
+
+  /** Stop the active call-sound preview, if any. */
+  async stopCallSoundPreview(): Promise<void> {
+    await settleNativePromise(NativeModule.voice_stopCallSoundPreview());
+  }
+  // <<< FORK
 
   /**
    * Set the native call contact handle template.
