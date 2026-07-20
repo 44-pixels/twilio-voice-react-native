@@ -57,18 +57,17 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
                                       @Nullable CallException callException) {
       logger.log(String.format("onCancelledCallInvite %s", cancelledCallInvite.getCallSid()));
 
-      // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
-      ForkCallLifecycleCoordinator.cancelledInvite(cancelledCallInvite.getCallSid());
-      // <<< FORK
-
-      // >>> FORK KAR-492 — see ForkCancelledInviteCleanup.java
+      // >>> FORK KAR-492, KAR-809 — see ForkCancelledInviteCleanup.java
       CallRecord callRecord = ForkCancelledInviteCleanup
-        .removeRecordOrCancelNotification(cancelledCallInvite);
+        .settleOrCancelNotification(cancelledCallInvite, callException);
       if (callRecord == null) return;
       // <<< FORK
 
-      callRecord.setCancelledCallInvite(cancelledCallInvite);
-      callRecord.setCallException(callException);
+      // >>> FORK KAR-443, KAR-809 — only the winning settlement changes lifecycle
+      ForkCallLifecycleCoordinator.cancelledInvite(cancelledCallInvite.getCallSid());
+      ForkCancelledInviteCleanup.removeSettledRecord(callRecord);
+      // <<< FORK
+
       getVoiceServiceApi().cancelCall(callRecord);
     }
   }
