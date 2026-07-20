@@ -29,6 +29,23 @@ final class ForkTelecomManager {
     ForkCoreTelecomManager.reportIncomingCall(context, callRecord);
   }
 
+  static void reportOutgoingCall(@NonNull Context context,
+                                 @NonNull CallRecordDatabase.CallRecord callRecord) {
+    ForkCoreTelecomManager.reportOutgoingCall(context, callRecord);
+  }
+
+  static int authorizeAnswer(@NonNull CallRecordDatabase.CallRecord callRecord) {
+    return ForkCoreTelecomManager.authorizeAnswer(callRecord);
+  }
+
+  static boolean isTelecomAudioOwner(@NonNull CallRecordDatabase.CallRecord callRecord) {
+    return ForkCoreTelecomManager.isTelecomAudioOwner(callRecord);
+  }
+
+  static boolean isTelecomAudioOwner(@NonNull java.util.UUID uuid) {
+    return ForkCoreTelecomManager.isTelecomAudioOwner(uuid);
+  }
+
   static void cancelIncomingCall(@Nullable String callSid) {
     ForkCoreTelecomManager.cancelIncomingCall(callSid);
   }

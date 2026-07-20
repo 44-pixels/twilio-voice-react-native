@@ -41,7 +41,6 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.pm.ServiceInfo;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
@@ -86,9 +85,11 @@ public class VoiceService extends Service {
     public void cancelCall(final CallRecordDatabase.CallRecord callRecord) {
       VoiceService.this.cancelCall(callRecord);
     }
-    public void raiseOutgoingCallNotification(final CallRecordDatabase.CallRecord callRecord) {
-      VoiceService.this.raiseOutgoingCallNotification(callRecord);
+    // >>> FORK KAR-443 — active outgoing foregrounding reports failure
+    public boolean raiseOutgoingCallNotification(final CallRecordDatabase.CallRecord callRecord) {
+      return VoiceService.this.raiseOutgoingCallNotification(callRecord);
     }
+    // <<< FORK
     public void cancelActiveCallNotification(final CallRecordDatabase.CallRecord callRecord) {
       VoiceService.this.cancelActiveCallNotification(callRecord);
     }
@@ -207,6 +208,9 @@ public class VoiceService extends Service {
 
       // report an error to logger
       logger.warning("WARNING: Incoming call cannot be handled, microphone permission not granted");
+      // >>> FORK KAR-443 — permission failure is terminal for the reserved invite
+      rejectCall(callRecord);
+      // <<< FORK
       return;
     }
 
@@ -238,6 +242,13 @@ public class VoiceService extends Service {
     if (null == callRecord) { logger.warning("acceptCall: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("acceptCall: " + callRecord.getUuid());
 
+    // >>> FORK KAR-443 — make repeated delivery of the same answer idempotent
+    if (callRecord.getVoiceCall() != null) {
+      callRecord.resolveCallAcceptedPromise(serializeCall(callRecord));
+      return;
+    }
+    // <<< FORK
+
     // verify that mic permissions have been granted and if not, throw a error
     if (ActivityCompat.checkSelfPermission(VoiceService.this,
       Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -246,27 +257,42 @@ public class VoiceService extends Service {
 
       // stop ringer sound
       VoiceApplicationProxy.getMediaPlayerManager().stop();
-      VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
+      // >>> FORK KAR-443 — AudioSwitch is fallback-only
+      ForkCallLifecycleCoordinator.deactivateFallbackAudio(callRecord);
+      callRecord.failCallAcceptedPromise("Microphone permission is not granted.");
+      // <<< FORK
 
       // report an error to JS layer
       sendPermissionsError();
 
       // report an error to logger
       logger.warning("WARNING: Call not accepted, microphone permission not granted");
+      rejectCall(callRecord);
       return;
     }
+
+    // >>> FORK KAR-443 — Telecom must authorize app-originated answers first
+    if (ForkCallLifecycleCoordinator.authorizeAnswer(callRecord)
+      == ForkCoreTelecomManager.ANSWER_PENDING) return;
+    // <<< FORK
 
     // cancel existing notification & put up in call
     Notification notification = NotificationUtility.createCallAnsweredNotificationWithLowImportance(
       VoiceService.this,
       callRecord);
-    createOrReplaceForegroundNotification(callRecord.getNotificationId(), notification);
+    // >>> FORK KAR-443 — foreground failure must precede and prevent Twilio acceptance
+    if (!createOrReplaceForegroundNotification(callRecord.getNotificationId(), notification)) {
+      callRecord.failCallAcceptedPromise("Unable to start active call foreground service.");
+      rejectCall(callRecord);
+      return;
+    }
+    // <<< FORK
 
     // stop ringer sound
     VoiceApplicationProxy.getMediaPlayerManager().stop();
 
-    // >>> FORK KAR-373 — activate audio path now that conversation begins (deferred from incomingCall)
-    VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().activate();
+    // >>> FORK KAR-373 / KAR-443 — AudioSwitch is fallback-only
+    ForkCallLifecycleCoordinator.activateFallbackAudio(callRecord);
     // <<< FORK
 
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java (foreground-accept path; intent-gated path in VoiceActivityProxy doesn't fire here)
@@ -296,9 +322,7 @@ public class VoiceService extends Service {
     // <<< FORK
 
     // handle if event spawned from JS
-    if (null != callRecord.getCallAcceptedPromise()) {
-      callRecord.getCallAcceptedPromise().resolve(serializeCall(callRecord));
-    }
+    callRecord.resolveCallAcceptedPromise(serializeCall(callRecord));
 
     // notify JS layer
     sendJSEvent(
@@ -332,15 +356,16 @@ public class VoiceService extends Service {
 
     // stop ringer sound
     VoiceApplicationProxy.getMediaPlayerManager().stop();
-    VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
-
-    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
-    ForkCallLifecycleCoordinator.rejectRequested(callRecord);
+    // >>> FORK KAR-443 — AudioSwitch is fallback-only
+    ForkCallLifecycleCoordinator.deactivateFallbackAudio(callRecord);
     // <<< FORK
 
     // reject call
     ForkTwilioVoiceThread.runBlocking(() -> callRecord.getCallInvite().reject(VoiceService.this));
     callRecord.setCallInviteUsedState();
+    // >>> FORK KAR-443 — release ownership only after Twilio settles
+    ForkCallLifecycleCoordinator.rejectRequested(callRecord);
+    // <<< FORK
     // >>> FORK KAR-492 — see ForkInvitePayloadStore.java / ForkVoiceMessageGuard.java
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
     ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());
@@ -373,7 +398,9 @@ public class VoiceService extends Service {
 
     // stop ringer sound
     VoiceApplicationProxy.getMediaPlayerManager().stop();
-    VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
+    // >>> FORK KAR-443 — AudioSwitch is fallback-only
+    ForkCallLifecycleCoordinator.deactivateFallbackAudio(callRecord);
+    // <<< FORK
 
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java
     ForkLockScreenFlags.clearForEndedCall();
@@ -395,8 +422,9 @@ public class VoiceService extends Service {
         new Pair<>(JS_EVENT_KEY_CANCELLED_CALL_INVITE_INFO, serializeCancelledCallInvite(callRecord)),
         new Pair<>(VoiceErrorKeyError, serializeCallException(callRecord))));
   }
-  private void raiseOutgoingCallNotification(final CallRecordDatabase.CallRecord callRecord) {
-    if (null == callRecord) { logger.warning("raiseOutgoingCallNotification: no call record (KAR-316)"); return; } // FORK KAR-316
+  // >>> FORK KAR-443 — active outgoing foregrounding reports failure to its caller
+  private boolean raiseOutgoingCallNotification(final CallRecordDatabase.CallRecord callRecord) {
+    if (null == callRecord) { logger.warning("raiseOutgoingCallNotification: no call record (KAR-316)"); return false; } // FORK KAR-316
     logger.debug("raiseOutgoingCallNotification: " + callRecord.getUuid());
 
     // put up outgoing call notification
@@ -404,8 +432,13 @@ public class VoiceService extends Service {
       NotificationUtility.createOutgoingCallNotificationWithLowImportance(
         VoiceService.this,
         callRecord);
-    createOrReplaceForegroundNotification(callRecord.getNotificationId(), notification);
+    if (!createOrReplaceForegroundNotification(callRecord.getNotificationId(), notification)) {
+      callRecord.getVoiceCall().disconnect();
+      return false;
+    }
+    return true;
   }
+  // <<< FORK
   private void foregroundAndDeprioritizeIncomingCallNotification(final CallRecordDatabase.CallRecord callRecord) {
     if (null == callRecord) { logger.warning("foregroundAndDeprioritizeIncomingCallNotification: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("foregroundAndDeprioritizeIncomingCallNotification: " + callRecord.getUuid());
@@ -435,14 +468,11 @@ public class VoiceService extends Service {
       (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     mNotificationManager.notify(notificationId, notification);
   }
-  private void createOrReplaceForegroundNotification(final int notificationId,
-                                                     final Notification notification) {
-    if (ActivityCompat.checkSelfPermission(VoiceService.this, Manifest.permission.POST_NOTIFICATIONS)
-      == PackageManager.PERMISSION_GRANTED) {
-      foregroundNotification(notificationId, notification);
-    } else {
-      logger.warning("WARNING: Notification not posted, permission not granted");
-    }
+  private boolean createOrReplaceForegroundNotification(final int notificationId,
+                                                        final Notification notification) {
+    // >>> FORK KAR-443 — POST_NOTIFICATIONS is not a prerequisite for foreground execution
+    return foregroundNotification(notificationId, notification);
+    // <<< FORK
   }
   private void removeNotification(final int notificationId) {
     logger.debug("removeNotification");
@@ -459,21 +489,12 @@ public class VoiceService extends Service {
     logger.debug("removeForegroundNotification");
     ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
   }
-  private void foregroundNotification(int id, Notification notification) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-      try {
-        startForeground(
-          id,
-          notification,
-          ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            | ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
-      } catch (Exception e) {
-        sendPermissionsError();
-        logger.warning(e, "Failed to place notification due to lack of permissions");
-      }
-    } else {
-      startForeground(id, notification);
-    }
+  private boolean foregroundNotification(int id, Notification notification) {
+    // >>> FORK KAR-443 — see ForkActiveCallForeground.java
+    boolean started = ForkActiveCallForeground.start(this, id, notification);
+    if (!started) sendPermissionsError();
+    return started;
+    // <<< FORK
   }
   private static UUID getMessageUUID(@NonNull final Intent intent) {
     // >>> FORK KAR-316 (Sentry KAREN-APP-58) — see ForkCallRecordLookup

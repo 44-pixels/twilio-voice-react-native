@@ -9,7 +9,6 @@
 // idempotent: missing records should clean up safe global state and return, not crash.
 package com.twiliovoicereactnative;
 
-import static com.twiliovoicereactnative.VoiceApplicationProxy.getAudioSwitchManager;
 import static com.twiliovoicereactnative.VoiceApplicationProxy.getCallRecordDatabase;
 import static com.twiliovoicereactnative.VoiceApplicationProxy.getMediaPlayerManager;
 
@@ -44,14 +43,14 @@ final class ForkCallListenerRecordGuard {
     if (callRecord != null) return callRecord;
 
     logMissing(eventName, uuid, call);
-    cleanupMissingTerminal(call);
+    cleanupMissingTerminal(uuid, call);
     return null;
   }
 
-  private static void cleanupMissingTerminal(@NonNull Call call) {
+  private static void cleanupMissingTerminal(@NonNull UUID uuid, @NonNull Call call) {
     String callSid = call.getSid();
-    getMediaPlayerManager().stop();
-    getAudioSwitchManager().getAudioSwitch().deactivate();
+    if (ForkSingleCallSession.isOwner(uuid)) getMediaPlayerManager().stop();
+    ForkCallLifecycleCoordinator.cleanupMissingTerminal(uuid);
     if (callSid == null || callSid.isEmpty()) return;
 
     ForkInvitePayloadStore.clear(callSid);
