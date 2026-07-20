@@ -138,6 +138,20 @@ class CallRecordDatabase  {
     public void setCallAcceptedPromise(@NonNull ModuleProxy.UniversalPromise callAcceptedPromise) {
       this.callAcceptedPromise = callAcceptedPromise;
     }
+    // >>> FORK KAR-443 — answer authorization must settle before Twilio accepts
+    public void failCallAcceptedPromise(@NonNull String message) {
+      if (this.callAcceptedPromise == null) return;
+      this.callAcceptedPromise.rejectWithName(
+        CommonConstants.ErrorCodeInvalidStateError,
+        message);
+      this.callAcceptedPromise = null;
+    }
+    public void resolveCallAcceptedPromise(@NonNull Object value) {
+      if (this.callAcceptedPromise == null) return;
+      this.callAcceptedPromise.resolve(value);
+      this.callAcceptedPromise = null;
+    }
+    // <<< FORK
     public void setCallRejectedPromise(@NonNull ModuleProxy.UniversalPromise callRejectedPromise) {
       this.callRejectedPromise = callRejectedPromise;
     }

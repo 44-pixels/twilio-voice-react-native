@@ -33,6 +33,11 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
       logger.log(String.format("onCallInvite %s", callInvite.getCallSid()));
 
       final CallRecord callRecord = new CallRecord(UUID.randomUUID(), callInvite);
+      // >>> FORK KAR-443 — enforce one Twilio call before this invite changes shared state
+      if (!ForkCallLifecycleCoordinator.claimIncoming(
+        getVoiceServiceApi().getServiceContext(),
+        callRecord)) return;
+      // <<< FORK
       // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
       ForkInvitePayloadStore.remember(callInvite, payload);
       // <<< FORK

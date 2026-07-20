@@ -40,6 +40,53 @@ final class ForkCallLifecycleCoordinator {
     return ForkVoiceMessageGuard.handleNativeFcm(context, data);
   }
 
+  static boolean claimIncoming(@NonNull Context context,
+                               @NonNull CallRecordDatabase.CallRecord callRecord) {
+    return ForkSingleCallSession.claimIncoming(context, callRecord);
+  }
+
+  static boolean claimOutgoing(@NonNull UUID uuid) {
+    return ForkSingleCallSession.claim(uuid);
+  }
+
+  static void outgoingInvite(@NonNull Context context,
+                             @NonNull CallRecordDatabase.CallRecord callRecord) {
+    CallState state = stateFor(callRecord, TwilioState.CONNECTING);
+    state.telecomState = ForkTelecomManager.isAvailable(context)
+      ? TelecomState.REPORTING
+      : TelecomState.NOT_REPORTED;
+    ForkTelecomManager.reportOutgoingCall(context, callRecord);
+  }
+
+  static void outgoingConnectFailed(@NonNull UUID uuid) {
+    ForkSingleCallSession.release(uuid);
+  }
+
+  static int authorizeAnswer(@NonNull CallRecordDatabase.CallRecord callRecord) {
+    return ForkTelecomManager.authorizeAnswer(callRecord);
+  }
+
+  static void activateFallbackAudio(@NonNull CallRecordDatabase.CallRecord callRecord) {
+    if (!ForkTelecomManager.isTelecomAudioOwner(callRecord)) {
+      VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().activate();
+    }
+  }
+
+  static void deactivateFallbackAudio(@NonNull CallRecordDatabase.CallRecord callRecord) {
+    if (ForkSingleCallSession.isOwner(callRecord.getUuid())
+      && !ForkTelecomManager.isTelecomAudioOwner(callRecord)) {
+      VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
+    }
+  }
+
+  static void cleanupMissingTerminal(@NonNull UUID uuid) {
+    if (!ForkSingleCallSession.isOwner(uuid)) return;
+    if (!ForkTelecomManager.isTelecomAudioOwner(uuid)) {
+      VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
+    }
+    ForkSingleCallSession.release(uuid);
+  }
+
   static void outgoingConnecting(@NonNull CallRecordDatabase.CallRecord callRecord) {
     CallState state = stateFor(callRecord, TwilioState.CONNECTING);
     state.twilioState = TwilioState.CONNECTING;
@@ -97,10 +144,12 @@ final class ForkCallLifecycleCoordinator {
 
     ForkIncomingCallWakeLock.release();
     ForkIncomingCallActivity.finishFor(callRecord);
+    boolean telecomManaged = ForkTelecomManager.isTelecomAudioOwner(callRecord);
     if (state.isTelecomMirrored()) {
       ForkTelecomManager.markRejected(callRecord);
     }
     finishCall(state);
+    if (!telecomManaged) ForkSingleCallSession.release(callRecord.getUuid());
   }
 
   static void cancelledBySystem(@NonNull CallRecordDatabase.CallRecord callRecord) {
@@ -115,10 +164,12 @@ final class ForkCallLifecycleCoordinator {
       logger.debug("cancelledBySystem: ignored for already accepted call " + callRecord.getCallSid());
       return;
     }
+    boolean telecomManaged = ForkTelecomManager.isTelecomAudioOwner(callRecord);
     if (state.isTelecomMirrored()) {
       ForkTelecomManager.cancelIncomingCall(callRecord.getCallSid());
     }
     finishCall(state);
+    if (!telecomManaged) ForkSingleCallSession.release(callRecord.getUuid());
   }
 
   static void twilioRinging(@NonNull CallRecordDatabase.CallRecord callRecord) {
@@ -151,12 +202,15 @@ final class ForkCallLifecycleCoordinator {
 
     ForkIncomingCallWakeLock.release();
     ForkIncomingCallActivity.finishFor(callRecord);
+    deactivateFallbackAudio(callRecord);
+    boolean telecomManaged = ForkTelecomManager.isTelecomAudioOwner(callRecord);
     if (state.isTelecomMirrored()) {
       ForkTelecomManager.markDisconnected(callRecord, callException);
     } else {
       logger.debug("twilioDisconnected: no Telecom call to disconnect " + state.identityLog());
     }
     finishCall(state);
+    if (!telecomManaged) ForkSingleCallSession.release(callRecord.getUuid());
   }
 
   static boolean selectAudioDevice(@NonNull AudioDevice audioDevice,
@@ -209,7 +263,10 @@ final class ForkCallLifecycleCoordinator {
     for (CallState state : calls.values()) {
       if (!callSid.equals(state.callSid)) continue;
       state.twilioState = TwilioState.DISCONNECTED;
+      boolean telecomManaged = state.uuid != null
+        && ForkTelecomManager.isTelecomAudioOwner(state.uuid);
       finishCall(state);
+      if (state.uuid != null && !telecomManaged) ForkSingleCallSession.release(state.uuid);
       return;
     }
   }
@@ -245,8 +302,7 @@ final class ForkCallLifecycleCoordinator {
     }
 
     boolean isTelecomMirrored() {
-      return direction == Direction.INCOMING
-        && telecomState != TelecomState.NOT_REPORTED
+      return telecomState != TelecomState.NOT_REPORTED
         && telecomState != TelecomState.ENDED;
     }
 

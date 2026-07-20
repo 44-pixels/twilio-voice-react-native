@@ -55,6 +55,14 @@ class VoiceModuleProxy {
         .params(twimlParams)
         .callMessageListener(new CallMessageListenerProxy())
         .build();
+      // >>> FORK KAR-443 — claim only after synchronous option validation
+      if (!ForkCallLifecycleCoordinator.claimOutgoing(uuid)) {
+        promise.rejectWithName(
+          CommonConstants.ErrorCodeInvalidStateError,
+          "Cannot start a second call while another call is in progress.");
+        return;
+      }
+      // <<< FORK
       try {
         final Call call = VoiceApplicationProxy.getVoiceServiceApi().connect(
           connectOptions,
@@ -73,7 +81,23 @@ class VoiceModuleProxy {
           notificationDisplayName
         );
 
+        // >>> FORK KAR-443 — allocate the outgoing notification before Telecom registration
+        callRecord.setNotificationId(NotificationUtility.createNotificationIdentifier());
+        // <<< FORK
         VoiceApplicationProxy.getCallRecordDatabase().add(callRecord);
+        // >>> FORK KAR-443 — foreground before registering outgoing calls with Telecom
+        if (!VoiceApplicationProxy.getVoiceServiceApi().raiseOutgoingCallNotification(callRecord)) {
+          VoiceApplicationProxy.getCallRecordDatabase().remove(callRecord);
+          ForkCallLifecycleCoordinator.outgoingConnectFailed(uuid);
+          promise.rejectWithName(
+            CommonConstants.ErrorCodeInvalidStateError,
+            "Unable to start active call foreground service.");
+          return;
+        }
+        ForkCallLifecycleCoordinator.outgoingInvite(
+          VoiceApplicationProxy.getVoiceServiceApi().getServiceContext(),
+          callRecord);
+        // <<< FORK
 
         // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
         ForkCallLifecycleCoordinator.outgoingConnecting(callRecord);
@@ -83,8 +107,18 @@ class VoiceModuleProxy {
         final WritableMap jsCall = ReactNativeArgumentsSerializer.serializeCall(callRecord);
         promise.resolve(jsCall);
       } catch (SecurityException e) {
+        // >>> FORK KAR-443 — release a failed outgoing reservation
+        ForkCallLifecycleCoordinator.outgoingConnectFailed(uuid);
+        // <<< FORK
         promise.rejectWithCode(31401, e.getMessage());
+      // >>> FORK KAR-443 — release any other synchronous outgoing setup failure
+      } catch (RuntimeException e) {
+        ForkCallLifecycleCoordinator.outgoingConnectFailed(uuid);
+        promise.rejectWithName(
+          CommonConstants.ErrorCodeInvalidStateError,
+          e.getMessage() == null ? "Unable to start outgoing call." : e.getMessage());
       }
+      // <<< FORK
     });
   }
 
@@ -115,13 +149,16 @@ class VoiceModuleProxy {
       return;
     }
 
-    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
+    // >>> FORK KAR-443 — Core Telecom exclusively routes managed calls
     boolean handledByTelecom = ForkCallLifecycleCoordinator.selectAudioDevice(audioDevice, routed -> {
       ForkTwilioVoiceThread.run(() -> {
-        if (!routed) {
-          this.audioSwitchManager.getAudioSwitch().selectDevice(audioDevice);
+        if (routed) {
+          promise.resolve(null);
+        } else {
+          promise.rejectWithName(
+            CommonConstants.ErrorCodeInvalidStateError,
+            "Core Telecom could not select the requested audio device.");
         }
-        promise.resolve(null);
       });
     });
     if (!handledByTelecom) {

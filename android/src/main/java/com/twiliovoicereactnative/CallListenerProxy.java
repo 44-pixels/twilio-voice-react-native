@@ -24,7 +24,6 @@ import static com.twiliovoicereactnative.CommonConstants.CallEventConnectFailure
 import static com.twiliovoicereactnative.CommonConstants.CallEventQualityWarningsChanged;
 import static com.twiliovoicereactnative.Constants.JS_EVENT_KEY_CALL_INFO;
 import static com.twiliovoicereactnative.VoiceApplicationProxy.getJSEventEmitter;
-import static com.twiliovoicereactnative.VoiceApplicationProxy.getAudioSwitchManager;
 import static com.twiliovoicereactnative.VoiceApplicationProxy.getMediaPlayerManager;
 import static com.twiliovoicereactnative.VoiceApplicationProxy.getVoiceServiceApi;
 import static com.twiliovoicereactnative.JSEventEmitter.constructJSMap;
@@ -50,21 +49,22 @@ class CallListenerProxy implements Call.Listener {
   public void onConnectFailure(@NonNull Call call, @NonNull CallException callException) {
     debug("onConnectFailure");
 
-    // stop sound and routing
+    // stop sound
     getMediaPlayerManager().stop();
-    getAudioSwitchManager().getAudioSwitch().deactivate();
+    // >>> FORK KAR-443 — owner-aware routing cleanup runs via onDisconnected below
+    // Do not deactivate AudioSwitch until call ownership is known.
+    // <<< FORK
 
     // find call record & remove
     // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
     CallRecord callRecord = ForkCallListenerRecordGuard.removeOrNull("onConnectFailure", uuid, call);
     if (callRecord == null) return;
     // <<< FORK
-    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
-    ForkCallLifecycleCoordinator.twilioDisconnected(callRecord, callException);
-    // <<< FORK
-
     // take down notification
     getVoiceServiceApi().cancelActiveCallNotification(callRecord);
+    // >>> FORK KAR-443 — release only after owner-scoped cleanup
+    ForkCallLifecycleCoordinator.twilioDisconnected(callRecord, callException);
+    // <<< FORK
 
     // serialize and notify JS
     sendJSEvent(
@@ -89,8 +89,14 @@ class CallListenerProxy implements Call.Listener {
     // <<< FORK
 
     // create notification & sound
-    callRecord.setNotificationId(NotificationUtility.createNotificationIdentifier());
-    getAudioSwitchManager().getAudioSwitch().activate();
+    // >>> FORK KAR-443 — outgoing foregrounding may allocate the ID before ringing
+    if (callRecord.getNotificationId() < 0) {
+      callRecord.setNotificationId(NotificationUtility.createNotificationIdentifier());
+    }
+    // <<< FORK
+    // >>> FORK KAR-443 — Core Telecom owns audio for registered outgoing calls
+    ForkCallLifecycleCoordinator.activateFallbackAudio(callRecord);
+    // <<< FORK
     getMediaPlayerManager().play(MediaPlayerManager.SoundTable.RINGTONE);
     getVoiceServiceApi().raiseOutgoingCallNotification(callRecord);
 
@@ -168,15 +174,13 @@ class CallListenerProxy implements Call.Listener {
     CallRecord callRecord = ForkCallListenerRecordGuard.removeOrNull("onDisconnected", uuid, call);
     if (callRecord == null) return;
     // <<< FORK
-    // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
-    ForkCallLifecycleCoordinator.twilioDisconnected(callRecord, callException);
-    // <<< FORK
-
     // stop audio & cancel notification
     getMediaPlayerManager().stop();
     getMediaPlayerManager().play(MediaPlayerManager.SoundTable.DISCONNECT);
-    getAudioSwitchManager().getAudioSwitch().deactivate();
     getVoiceServiceApi().cancelActiveCallNotification(callRecord);
+    // >>> FORK KAR-443 — release only after owner-scoped cleanup
+    ForkCallLifecycleCoordinator.twilioDisconnected(callRecord, callException);
+    // <<< FORK
 
     // notify JS layer
     sendJSEvent(

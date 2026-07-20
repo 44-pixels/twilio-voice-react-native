@@ -47,6 +47,14 @@ class CallInviteModuleProxy {
     getCallRecord(uuid, promise, (callRecord) -> {
       logger.debug(String.format(".accept(%s) > runnable", uuid));
 
+      // >>> FORK KAR-443 — only one answer transaction may own the invite
+      if (callRecord.getCallAcceptedPromise() != null) {
+        promise.rejectWithName(
+          CommonConstants.ErrorCodeInvalidStateError,
+          "Call answer is already in progress.");
+        return;
+      }
+      // <<< FORK
       callRecord.setCallAcceptedPromise(promise);
 
       try {
