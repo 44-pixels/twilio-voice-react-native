@@ -53,6 +53,9 @@ import androidx.core.app.ServiceCompat;
 import com.facebook.react.bridge.WritableMap;
 import com.twilio.voice.AcceptOptions;
 import com.twilio.voice.Call;
+// >>> FORK KAR-809 — see ForkCallInviteSettlement.java
+import com.twilio.voice.CallInvite;
+// <<< FORK
 import com.twilio.voice.ConnectOptions;
 import com.twilio.voice.Voice;
 
@@ -275,7 +278,6 @@ public class VoiceService extends Service {
     if (ForkCallLifecycleCoordinator.authorizeAnswer(callRecord)
       == ForkCoreTelecomManager.ANSWER_PENDING) return;
     // <<< FORK
-
     // cancel existing notification & put up in call
     Notification notification = NotificationUtility.createCallAnsweredNotificationWithLowImportance(
       VoiceService.this,
@@ -286,6 +288,19 @@ public class VoiceService extends Service {
       rejectCall(callRecord);
       return;
     }
+    // <<< FORK
+
+    // >>> FORK KAR-809 — settle only after Telecom and foreground prerequisites succeed
+    final CallInvite callInvite = ForkCallInviteSettlement.claim(
+      callRecord, ForkCallInviteSettlement.Action.ACCEPT);
+    if (callInvite == null) {
+      removeForegroundNotification();
+      ForkCallInviteSettlement.rejectPendingAction(
+        callRecord, ForkCallInviteSettlement.Action.ACCEPT);
+      return;
+    }
+    ForkCallInviteSettlement.rejectCompetingAction(
+      callRecord, ForkCallInviteSettlement.Action.ACCEPT);
     // <<< FORK
 
     // stop ringer sound
@@ -305,12 +320,14 @@ public class VoiceService extends Service {
       .callMessageListener(new CallMessageListenerProxy())
       .build();
 
+    // >>> FORK KAR-809 — use the invite captured by the atomic settlement claim
     ForkTwilioVoiceThread.runBlocking(() -> callRecord.setCall(
-      callRecord.getCallInvite().accept(
+      callInvite.accept(
         VoiceService.this,
         acceptOptions,
         new CallListenerProxy(callRecord.getUuid(), VoiceService.this))));
-    callRecord.setCallInviteUsedState();
+    // CallInvite state was transitioned by ForkCallInviteSettlement.claim().
+    // <<< FORK
 
     // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
     ForkCallLifecycleCoordinator.answerRequested(callRecord);
@@ -347,6 +364,18 @@ public class VoiceService extends Service {
     if (null == callRecord) { logger.warning("rejectCall: no call record (KAR-316)"); return; } // FORK KAR-316
     logger.debug("rejectCall: " + callRecord.getUuid());
 
+    // >>> FORK KAR-809 — see ForkCallInviteSettlement.java
+    final CallInvite callInvite = ForkCallInviteSettlement.claim(
+      callRecord, ForkCallInviteSettlement.Action.REJECT);
+    if (callInvite == null) {
+      ForkCallInviteSettlement.rejectPendingAction(
+        callRecord, ForkCallInviteSettlement.Action.REJECT);
+      return;
+    }
+    ForkCallInviteSettlement.rejectCompetingAction(
+      callRecord, ForkCallInviteSettlement.Action.REJECT);
+    // <<< FORK
+
     // remove call record
     getCallRecordDatabase().remove(callRecord);
 
@@ -361,8 +390,10 @@ public class VoiceService extends Service {
     // <<< FORK
 
     // reject call
-    ForkTwilioVoiceThread.runBlocking(() -> callRecord.getCallInvite().reject(VoiceService.this));
-    callRecord.setCallInviteUsedState();
+    // >>> FORK KAR-809 — use the invite captured by the atomic settlement claim
+    ForkTwilioVoiceThread.runBlocking(() -> callInvite.reject(VoiceService.this));
+    // CallInvite state was transitioned by ForkCallInviteSettlement.claim().
+    // <<< FORK
     // >>> FORK KAR-443 — release ownership only after Twilio settles
     ForkCallLifecycleCoordinator.rejectRequested(callRecord);
     // <<< FORK

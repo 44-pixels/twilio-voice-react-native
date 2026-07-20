@@ -1,8 +1,9 @@
-// FORK — KAR-492
-// Owns: cancelled-invite cleanup when the in-memory CallRecord is gone.
+// FORK — KAR-492, KAR-809
+// Owns: atomic cancelled-invite settlement and cleanup when the in-memory
+// CallRecord is gone.
 // Hooks into: VoiceFirebaseMessagingService.MessageHandler.onCancelledCallInvite.
 // Re-check on SDK bump: whether upstream still requireNonNulls the removed
-// CallRecord on cancelled invites.
+// CallRecord and where cancellation competes with accept/reject.
 //
 // If Android kills the process after an incoming notification is posted, the
 // CallRecordDatabase is empty when a later cancelled-invite FCM is handled.
@@ -16,6 +17,7 @@ import static com.twiliovoicereactnative.VoiceApplicationProxy.getCallRecordData
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.twilio.voice.CallException;
 import com.twilio.voice.CancelledCallInvite;
 
 public final class ForkCancelledInviteCleanup {
@@ -24,20 +26,28 @@ public final class ForkCancelledInviteCleanup {
   private ForkCancelledInviteCleanup() {}
 
   @Nullable
-  public static CallRecordDatabase.CallRecord removeRecordOrCancelNotification(
-    @NonNull CancelledCallInvite cancelledCallInvite
+  public static CallRecordDatabase.CallRecord settleOrCancelNotification(
+    @NonNull CancelledCallInvite cancelledCallInvite,
+    @Nullable CallException callException
   ) {
     CallRecordDatabase.CallRecord callRecord = getCallRecordDatabase()
       .get(new CallRecordDatabase.CallRecord(cancelledCallInvite.getCallSid()));
     ForkInvitePayloadStore.clear(cancelledCallInvite.getCallSid());
-    if (callRecord != null && isAcceptedOrActive(callRecord)) {
-      logger.warning(
-        "stale cancelled invite for accepted call; keeping CallRecord callSid="
-          + cancelledCallInvite.getCallSid());
-      ForkVoiceMessageGuard.markSettled(cancelledCallInvite.getCallSid());
-      return null;
+
+    if (callRecord != null) {
+      boolean cancellationWon = ForkCallInviteSettlement.cancel(
+        callRecord, cancelledCallInvite, callException);
+      if (!cancellationWon) {
+        logger.warning(
+          "stale cancelled invite for settled call; keeping CallRecord callSid="
+            + cancelledCallInvite.getCallSid());
+        ForkVoiceMessageGuard.markSettled(cancelledCallInvite.getCallSid());
+        return null;
+      }
+
+      ForkCallInviteSettlement.rejectPendingActions(callRecord);
+      return callRecord;
     }
-    if (callRecord != null) return getCallRecordDatabase().remove(callRecord);
 
     if (ForkNotificationIdentity.cancelForCallSid(
       VoiceApplicationProxy.getApplicationContext(),
@@ -54,8 +64,9 @@ public final class ForkCancelledInviteCleanup {
     return null;
   }
 
-  private static boolean isAcceptedOrActive(@NonNull CallRecordDatabase.CallRecord callRecord) {
-    return callRecord.getCallInviteState() == CallRecordDatabase.CallRecord.CallInviteState.USED
-      || callRecord.getVoiceCall() != null;
+  public static void removeSettledRecord(
+    @NonNull CallRecordDatabase.CallRecord callRecord
+  ) {
+    getCallRecordDatabase().remove(callRecord);
   }
 }

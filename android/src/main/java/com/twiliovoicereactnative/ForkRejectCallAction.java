@@ -1,5 +1,6 @@
-// FORK — KAR-492
-// Owns: notification Decline action handling outside VoiceService.
+// FORK — KAR-492, KAR-809
+// Owns: notification Decline action handling outside VoiceService, including
+// atomic ownership of live-record rejection.
 // Hooks into: ForkNotificationActionReceiver and VoiceService ACTION_REJECT_CALL
 //             null-record fallback.
 // Re-check on SDK bump: whether upstream still routes Decline through a
@@ -29,6 +30,8 @@ import android.util.Pair;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.twilio.voice.CallInvite;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -100,25 +103,23 @@ public final class ForkRejectCallAction {
                                        @NonNull String actionKey) {
     logger.debug("rejectLiveRecord: " + callRecord.getUuid());
 
+    CallInvite callInvite = ForkCallInviteSettlement.claim(
+      callRecord, ForkCallInviteSettlement.Action.REJECT);
+    if (callInvite == null) {
+      finishDeclineKey(actionKey);
+      return;
+    }
+    ForkCallInviteSettlement.rejectCompetingAction(
+      callRecord, ForkCallInviteSettlement.Action.REJECT);
+
     getCallRecordDatabase().remove(callRecord);
 
     VoiceService.removeForegroundNotificationIfRunning();
     VoiceApplicationProxy.getMediaPlayerManager().stop();
     ForkCallLifecycleCoordinator.deactivateFallbackAudio(callRecord);
 
-    if (callRecord.getCallInvite() == null) {
-      ForkCallLifecycleCoordinator.rejectRequested(callRecord);
-      logger.warning("Decline action found CallRecord without CallInvite " + callRecord.getUuid());
-      ForkNotificationIdentity.cancelForCallSid(context, callRecord.getCallSid());
-      ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());
-      ForkLockScreenFlags.clearForEndedCall();
-      finishDeclineKey(actionKey);
-      return;
-    }
-
     ForkTwilioVoiceThread.runBlocking(
-      () -> callRecord.getCallInvite().reject(context.getApplicationContext()));
-    callRecord.setCallInviteUsedState();
+      () -> callInvite.reject(context.getApplicationContext()));
     ForkCallLifecycleCoordinator.rejectRequested(callRecord);
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
     ForkNotificationIdentity.cancelForCallSid(context, callRecord.getCallSid());

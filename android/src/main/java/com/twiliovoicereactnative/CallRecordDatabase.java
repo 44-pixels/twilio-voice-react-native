@@ -172,20 +172,26 @@ class CallRecordDatabase  {
     callRecordList.clear();
   }
 
+  // >>> FORK KAR-809 — compound Vector operations must share its monitor
   public CallRecord get(final CallRecord record) {
-    try {
-      return callRecordList.get(callRecordList.indexOf(record));
-    } catch (IndexOutOfBoundsException e) {
-      return null;
+    synchronized (callRecordList) {
+      try {
+        return callRecordList.get(callRecordList.indexOf(record));
+      } catch (IndexOutOfBoundsException e) {
+        return null;
+      }
     }
   }
   public CallRecord remove(final CallRecord record) {
-    try {
-      return callRecordList.remove(callRecordList.indexOf(record));
-    } catch (IndexOutOfBoundsException e) {
-      return null;
+    synchronized (callRecordList) {
+      try {
+        return callRecordList.remove(callRecordList.indexOf(record));
+      } catch (IndexOutOfBoundsException e) {
+        return null;
+      }
     }
   }
+  // <<< FORK
   public Collection<CallRecord> getCollection() {
     return callRecordList;
   }
