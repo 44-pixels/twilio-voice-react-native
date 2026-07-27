@@ -34,6 +34,7 @@ public final class ForkCallSounds {
   private static final String PREF_RINGTONE_MODE = "fork_call_sounds_ringtone_mode";
   private static final String PREF_RINGTONE_ID = "fork_call_sounds_ringtone_id";
   private static final String PREF_CALL_ENDED_MODE = "fork_call_sounds_call_ended_mode";
+  private static final float CALL_ENDED_VOLUME = 0.4f;
   private static final String CATALOG_RESOURCE = "twilio_voice_call_sounds";
   private static final String SOUND_RESOURCE_PREFIX = "twilio_voice_call_sound_";
   private static final String OS_RINGTONE_ID = "os-ringtone";
@@ -154,6 +155,7 @@ public final class ForkCallSounds {
       false
     );
     if (callEndedPlayer != null) {
+      callEndedPlayer.setVolume(CALL_ENDED_VOLUME, CALL_ENDED_VOLUME);
       callEndedPlayer.setOnCompletionListener(player -> {
         player.release();
         if (callEndedPlayer == player) callEndedPlayer = null;
