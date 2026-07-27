@@ -1,6 +1,6 @@
 # Configure call sounds
 
-The SDK can select an incoming-call ringtone and control an app-provided call-ended sound at runtime. Sounds must be bundled into the native application through the Expo config plugin.
+The SDK can select an incoming-call ringtone, play connection-status feedback, and control an app-provided call-ended sound at runtime. Sounds must be bundled into the native application through the Expo config plugin.
 
 ## Add sounds to an Expo build
 
@@ -26,6 +26,12 @@ module.exports = {
                 source: './assets/sounds/soft.wav',
               },
             ],
+            connected: {
+              source: './assets/sounds/connected.wav',
+            },
+            hasIssues: {
+              source: './assets/sounds/has-issues.wav',
+            },
             callEnded: {
               source: './assets/sounds/end-call.wav',
             },
@@ -37,7 +43,9 @@ module.exports = {
 };
 ```
 
-Changing this catalog requires a native rebuild. It is unavailable in Expo Go.
+Changing this catalog requires a native rebuild. It is unavailable in Expo Go. The `connected`, `hasIssues`, and `callEnded` sounds are optional.
+
+The SDK plays `connected` when a call initially connects and when connection issues clear. It plays `hasIssues` when either Twilio reconnects or reports poor network quality. State transitions take effect immediately, while status sounds are throttled to at most one every two seconds to avoid rapid sound repetition.
 
 Sound IDs must start with a lowercase letter and contain only lowercase letters, numbers, and underscores. At most one ringtone can have `default: true`. Users whose persisted ringtone mode is `default` automatically receive a newly configured default after upgrading; users who explicitly selected a ringtone keep that selection. If no ringtone is marked as default, the SDK's built-in ringtone is used. Use audio files supported by both target platforms.
 

@@ -1,6 +1,7 @@
 // FORK — KAR-787
-// Owns: Persisted ringtone/call-ended selection, bundled sound discovery, and preview playback.
-// Hooks into: ExpoModule, TwilioVoiceReactNativeModule, MediaPlayerManager, and ForkRingerPool.
+// Owns: Persisted call-sound settings, bundled sound discovery, and native playback.
+// Hooks into: ExpoModule, TwilioVoiceReactNativeModule, MediaPlayerManager, ForkRingerPool,
+// and ForkCallIssueState.
 // Re-check on SDK bump: native promise serialization and call audio usage attributes.
 package com.twiliovoicereactnative;
 
@@ -37,10 +38,13 @@ public final class ForkCallSounds {
   private static final float CALL_ENDED_VOLUME = 0.4f;
   private static final String CATALOG_RESOURCE = "twilio_voice_call_sounds";
   private static final String SOUND_RESOURCE_PREFIX = "twilio_voice_call_sound_";
+  private static final String CONNECTED_RESOURCE = "twilio_voice_connected";
+  private static final String HAS_ISSUES_RESOURCE = "twilio_voice_has_issues";
   private static final String OS_RINGTONE_ID = "os-ringtone";
 
   private static MediaPlayer previewPlayer;
   private static MediaPlayer callEndedPlayer;
+  private static MediaPlayer connectionStatusPlayer;
 
   private ForkCallSounds() {}
 
@@ -140,6 +144,7 @@ public final class ForkCallSounds {
   }
 
   static boolean handleCallEnded(Context context) {
+    stopConnectionStatusSound();
     SharedPreferences preferences = preferences(context);
     String mode = preferences.getString(PREF_CALL_ENDED_MODE, MODE_ENABLED);
     if (MODE_DISABLED.equals(mode)) return true;
@@ -163,6 +168,19 @@ public final class ForkCallSounds {
       callEndedPlayer.start();
     }
     return true;
+  }
+
+  static void playConnectedSound() {
+    playConnectionStatusSound("connected", CONNECTED_RESOURCE);
+  }
+
+  static void playHasIssuesSound() {
+    playConnectionStatusSound("hasIssues", HAS_ISSUES_RESOURCE);
+  }
+
+  static void stopConnectionStatusSound() {
+    release(connectionStatusPlayer);
+    connectionStatusPlayer = null;
   }
 
   static MediaPlayer createRingtonePlayer(Context context, int defaultResourceId) {
@@ -279,6 +297,33 @@ public final class ForkCallSounds {
       "raw",
       context.getPackageName()
     );
+  }
+
+  private static void playConnectionStatusSound(String catalogKey, String resourceName) {
+    stopConnectionStatusSound();
+    Context context = VoiceApplicationProxy.getApplicationContext();
+    if (catalog(context).optJSONObject(catalogKey) == null) return;
+
+    int resourceId = context.getResources().getIdentifier(
+      resourceName,
+      "raw",
+      context.getPackageName()
+    );
+    if (resourceId == 0) return;
+
+    connectionStatusPlayer = createPlayer(
+      context,
+      resourceId,
+      AudioAttributes.USAGE_VOICE_COMMUNICATION,
+      false
+    );
+    if (connectionStatusPlayer == null) return;
+
+    connectionStatusPlayer.setOnCompletionListener(player -> {
+      player.release();
+      if (connectionStatusPlayer == player) connectionStatusPlayer = null;
+    });
+    connectionStatusPlayer.start();
   }
 
   private static JSONObject catalog(Context context) {

@@ -1,6 +1,7 @@
 // FORK — KAR-787
-// Owns: Persisted bundled ringtone/call-ended selection and native playback.
-// Hooks into: TwilioVoiceReactNative+CallKit.m and TwilioVoiceReactNative+ForkCallSounds.m.
+// Owns: Persisted bundled call-sound settings and native playback.
+// Hooks into: TwilioVoiceReactNative+CallKit.m, TwilioVoiceReactNative+ForkCallSounds.m,
+// and ForkCallIssueState.m.
 // Re-check on SDK bump: CallKit provider initialization and disconnect callbacks.
 
 #import <AVFoundation/AVFoundation.h>
@@ -21,6 +22,7 @@ static const float ForkCallEndedVolume = 0.4f;
 static NSDictionary *sRememberedCallKitConfiguration;
 static AVAudioPlayer *sPreviewPlayer;
 static AVAudioPlayer *sCallEndedPlayer;
+static NSMutableDictionary<NSString *, AVAudioPlayer *> *sConnectionStatusPlayers;
 static NSString *sPreviewPreviousCategory;
 static NSString *sPreviewPreviousMode;
 static AVAudioSessionCategoryOptions sPreviewPreviousOptions;
@@ -169,14 +171,15 @@ static AVAudioSessionCategoryOptions sPreviewPreviousOptions;
     sPreviewPreviousOptions = 0;
 }
 
-+ (void)playCallEndedSound {
++ (void)fork_playCallEndedSoundForCall:(NSUUID *)uuid {
+    [self fork_stopConnectionStatusSoundForCall:uuid];
     NSUserDefaults *preferences = [NSUserDefaults standardUserDefaults];
     NSString *mode = [preferences stringForKey:ForkCallEndedModeKey] ?: ForkModeEnabled;
     if (![mode isEqualToString:ForkModeEnabled]) {
         return;
     }
 
-    NSDictionary *entry = [self catalog][@"callEnded"];
+    NSDictionary *entry = [self fork_catalogEntryForKey:@"callEnded"];
     NSURL *soundURL = [self soundURLForFileName:entry[@"fileName"]];
     if (!soundURL) {
         return;
@@ -186,6 +189,47 @@ static AVAudioSessionCategoryOptions sPreviewPreviousOptions;
     sCallEndedPlayer = [[AVAudioPlayer alloc] initWithContentsOfURL:soundURL error:nil];
     sCallEndedPlayer.volume = ForkCallEndedVolume;
     [sCallEndedPlayer play];
+}
+
++ (void)fork_playConnectedSoundForCall:(NSUUID *)uuid {
+    [self fork_playConnectionStatusSound:@"connected" forCall:uuid];
+}
+
++ (void)fork_playHasIssuesSoundForCall:(NSUUID *)uuid {
+    [self fork_playConnectionStatusSound:@"hasIssues" forCall:uuid];
+}
+
++ (void)fork_stopConnectionStatusSoundForCall:(NSUUID *)uuid {
+    AVAudioPlayer *player = [self fork_connectionStatusPlayers][uuid.UUIDString];
+    [player stop];
+    [[self fork_connectionStatusPlayers] removeObjectForKey:uuid.UUIDString];
+}
+
++ (void)fork_playConnectionStatusSound:(NSString *)catalogKey forCall:(NSUUID *)uuid {
+    [self fork_stopConnectionStatusSoundForCall:uuid];
+    NSDictionary *entry = [self fork_catalogEntryForKey:catalogKey];
+    NSURL *soundURL = [self soundURLForFileName:entry[@"fileName"]];
+    if (!soundURL) return;
+
+    AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:soundURL error:nil];
+    if (![player prepareToPlay]) return;
+
+    [self fork_connectionStatusPlayers][uuid.UUIDString] = player;
+    if (![player play]) {
+        [[self fork_connectionStatusPlayers] removeObjectForKey:uuid.UUIDString];
+    }
+}
+
++ (NSMutableDictionary<NSString *, AVAudioPlayer *> *)fork_connectionStatusPlayers {
+    if (!sConnectionStatusPlayers) {
+        sConnectionStatusPlayers = [NSMutableDictionary dictionary];
+    }
+    return sConnectionStatusPlayers;
+}
+
++ (NSDictionary *)fork_catalogEntryForKey:(NSString *)key {
+    id entry = [self catalog][key];
+    return [entry isKindOfClass:[NSDictionary class]] ? entry : nil;
 }
 
 + (NSDictionary *)catalog {
