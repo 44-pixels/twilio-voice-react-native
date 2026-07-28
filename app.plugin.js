@@ -32,6 +32,8 @@ const CALLBACK_DEEPLINK_META_DATA =
 // >>> FORK KAR-787 — see ForkCallSounds
 const CALL_SOUND_PREFIX = 'twilio_voice_call_sound_';
 const CALL_ENDED_PREFIX = 'twilio_voice_call_ended';
+const CONNECTED_PREFIX = 'twilio_voice_connected';
+const HAS_ISSUES_PREFIX = 'twilio_voice_has_issues';
 const CALL_SOUND_CATALOG = 'twilio_voice_call_sounds.json';
 const IOS_CALL_SOUND_DIRECTORY = 'TwilioVoiceCallSounds';
 // <<< FORK
@@ -48,6 +50,13 @@ function soundSource(projectRoot, sound, description) {
   const extension = path.extname(source).toLowerCase();
   if (!extension) throw new Error(`${description} source requires a file extension`);
   return {source, extension};
+}
+
+function optionalCallSound(projectRoot, sound, description, fileNamePrefix) {
+  if (!sound) return null;
+
+  const {source, extension} = soundSource(projectRoot, sound, description);
+  return {source, fileName: `${fileNamePrefix}${extension}`};
 }
 
 function callSounds(projectRoot, props) {
@@ -91,19 +100,25 @@ function callSounds(projectRoot, props) {
     };
   });
 
-  let callEnded = null;
-  if (configuration.callEnded) {
-    const {source, extension} = soundSource(
-      projectRoot,
-      configuration.callEnded,
-      'Call-ended sound'
-    );
-    callEnded = {
-      source,
-      fileName: `${CALL_ENDED_PREFIX}${extension}`,
-    };
-  }
-  return {ringtones, callEnded};
+  const callEnded = optionalCallSound(
+    projectRoot,
+    configuration.callEnded,
+    'Call-ended sound',
+    CALL_ENDED_PREFIX
+  );
+  const connected = optionalCallSound(
+    projectRoot,
+    configuration.connected,
+    'Connected sound',
+    CONNECTED_PREFIX
+  );
+  const hasIssues = optionalCallSound(
+    projectRoot,
+    configuration.hasIssues,
+    'Has-issues sound',
+    HAS_ISSUES_PREFIX
+  );
+  return {ringtones, callEnded, connected, hasIssues};
 }
 
 function writeCallSoundCatalog(destination, sounds) {
@@ -115,12 +130,13 @@ function writeCallSoundCatalog(destination, sounds) {
       fileName,
     })
   );
-  const callEnded = sounds.callEnded
-    ? {fileName: sounds.callEnded.fileName}
-    : null;
+  const catalogSound = sound => sound ? {fileName: sound.fileName} : null;
+  const callEnded = catalogSound(sounds.callEnded);
+  const connected = catalogSound(sounds.connected);
+  const hasIssues = catalogSound(sounds.hasIssues);
   fs.writeFileSync(
     destination,
-    `${JSON.stringify({ringtones, callEnded}, null, 2)}\n`
+    `${JSON.stringify({ringtones, callEnded, connected, hasIssues}, null, 2)}\n`
   );
 }
 
@@ -128,14 +144,19 @@ function replaceGeneratedCallSounds(directory, sounds, removeStaleSounds = true)
   fs.mkdirSync(directory, {recursive: true});
   for (const fileName of fs.readdirSync(directory)) {
     const isGeneratedSound = fileName.startsWith(CALL_SOUND_PREFIX)
-      || fileName.startsWith(CALL_ENDED_PREFIX);
+      || fileName.startsWith(CALL_ENDED_PREFIX)
+      || fileName.startsWith(CONNECTED_PREFIX)
+      || fileName.startsWith(HAS_ISSUES_PREFIX);
     if ((removeStaleSounds && isGeneratedSound) || fileName === CALL_SOUND_CATALOG) {
       fs.rmSync(path.join(directory, fileName));
     }
   }
-  const files = sounds.callEnded
-    ? [...sounds.ringtones, sounds.callEnded]
-    : sounds.ringtones;
+  const files = [
+    ...sounds.ringtones,
+    sounds.callEnded,
+    sounds.connected,
+    sounds.hasIssues,
+  ].filter(Boolean);
   for (const sound of files) {
     fs.copyFileSync(sound.source, path.join(directory, sound.fileName));
   }
@@ -402,13 +423,15 @@ function withTwilioVoiceFirebaseMessaging(config, props = {}) {
       IOS_CALL_SOUND_DIRECTORY
     );
     const target = project.getFirstTarget().uuid;
-    const callEndedResourceNames = sounds.callEnded
-      ? [sounds.callEnded.fileName]
-      : [];
+    const optionalResourceNames = [
+      sounds.callEnded,
+      sounds.connected,
+      sounds.hasIssues,
+    ].filter(Boolean).map(sound => sound.fileName);
     const resourceNames = [
       CALL_SOUND_CATALOG,
       ...sounds.ringtones.map(sound => sound.fileName),
-      ...callEndedResourceNames,
+      ...optionalResourceNames,
     ];
 
     for (const resourceName of resourceNames) {

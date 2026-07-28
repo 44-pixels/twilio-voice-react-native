@@ -13,6 +13,9 @@
 // >>> FORK KAR-787 — see ForkCallSounds.h
 #import "ForkCallSounds.h"
 // <<< FORK
+// >>> FORK KAR-857 — see ForkCallIssueState.h
+#import "ForkCallIssueState.h"
+// <<< FORK
 // >>> FORK KAR-381 — see ForkE164.h
 #import "ForkE164.h"
 // <<< FORK
@@ -384,6 +387,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     self.callConnectMap[call.uuid.UUIDString] = [self getSimplifiedISO8601FormattedTimestamp:[NSDate date]];
 
     [self stopRingback];
+    // >>> FORK KAR-857 — see ForkCallIssueState.h
+    [ForkCallIssueState fork_connectedCall:call.uuid];
+    // <<< FORK
 
     [self sendEventWithName:kTwilioVoiceReactNativeScopeCall
                        body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventConnected,
@@ -396,8 +402,11 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)call:(TVOCall *)call didDisconnectWithError:(NSError *)error {
+    // >>> FORK KAR-857 — see ForkCallIssueState.h
+    [ForkCallIssueState fork_endedCall:call.uuid];
+    // <<< FORK
     // >>> FORK KAR-787 — see ForkCallSounds
-    [ForkCallSounds playCallEndedSound];
+    [ForkCallSounds fork_playCallEndedSoundForCall:call.uuid];
     // <<< FORK
     NSDictionary *messageBody = [NSDictionary dictionary];
     if (error) {
@@ -425,8 +434,11 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)call:(TVOCall *)call didFailToConnectWithError:(NSError *)error {
+    // >>> FORK KAR-857 — see ForkCallIssueState.h
+    [ForkCallIssueState fork_endedCall:call.uuid];
+    // <<< FORK
     // >>> FORK KAR-787 — see ForkCallSounds
-    [ForkCallSounds playCallEndedSound];
+    [ForkCallSounds fork_playCallEndedSoundForCall:call.uuid];
     // <<< FORK
     [self sendEventWithName:kTwilioVoiceReactNativeScopeCall
                        body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventConnectFailure,
@@ -461,6 +473,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)call:(TVOCall *)call isReconnectingWithError:(NSError *)error {
+    // >>> FORK KAR-857 — see ForkCallIssueState.h
+    [ForkCallIssueState fork_reconnectingCall:call.uuid];
+    // <<< FORK
     [self sendEventWithName:kTwilioVoiceReactNativeScopeCall
                        body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventReconnecting,
                               kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call],
@@ -469,6 +484,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)callDidReconnect:(TVOCall *)call {
+    // >>> FORK KAR-857 — see ForkCallIssueState.h
+    [ForkCallIssueState fork_reconnectedCall:call.uuid];
+    // <<< FORK
     [self sendEventWithName:kTwilioVoiceReactNativeScopeCall
                        body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventReconnected,
                               kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call]}];
@@ -477,6 +495,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 - (void)call:(TVOCall *)call
 didReceiveQualityWarnings:(NSSet<NSNumber *> *)currentWarnings
 previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
+    // >>> FORK KAR-857 — see ForkCallIssueState.h
+    [ForkCallIssueState fork_call:call.uuid qualityWarningsChanged:currentWarnings];
+    // <<< FORK
     NSMutableArray<NSString *> *currentWarningEvents = [NSMutableArray array];
     for (NSNumber *warning in currentWarnings) {
         NSString *event = [self warningNameWithNumber:warning];
