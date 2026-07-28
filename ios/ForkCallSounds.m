@@ -17,7 +17,7 @@ static NSString * const ForkRingtoneIdKey = @"forkCallSoundsRingtoneId";
 static NSString * const ForkCallEndedModeKey = @"forkCallSoundsCallEndedMode";
 static NSString * const ForkCatalogName = @"twilio_voice_call_sounds";
 static NSString * const ForkOSRingtoneId = @"os-ringtone";
-static const float ForkCallEndedVolume = 0.4f;
+static const float ForkCallSoundVolume = 0.4f;
 
 static NSDictionary *sRememberedCallKitConfiguration;
 static AVAudioPlayer *sPreviewPlayer;
@@ -187,7 +187,7 @@ static AVAudioSessionCategoryOptions sPreviewPreviousOptions;
 
     [sCallEndedPlayer stop];
     sCallEndedPlayer = [[AVAudioPlayer alloc] initWithContentsOfURL:soundURL error:nil];
-    sCallEndedPlayer.volume = ForkCallEndedVolume;
+    sCallEndedPlayer.volume = ForkCallSoundVolume;
     [sCallEndedPlayer play];
 }
 
@@ -212,6 +212,7 @@ static AVAudioSessionCategoryOptions sPreviewPreviousOptions;
     if (!soundURL) return;
 
     AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:soundURL error:nil];
+    player.volume = ForkCallSoundVolume;
     if (![player prepareToPlay]) return;
 
     [self fork_connectionStatusPlayers][uuid.UUIDString] = player;
