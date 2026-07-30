@@ -18,6 +18,14 @@ export declare const mockVoiceNativeEvents: {
             callInvite: import("../type/CallInvite").NativeCallInviteInfo;
         };
     };
+    callbackRequested: {
+        name: Constants;
+        nativeEvent: {
+            type: Constants;
+            requestId: string;
+            handle: string;
+        };
+    };
     error: {
         name: Constants;
         nativeEvent: {

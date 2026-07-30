@@ -15,7 +15,10 @@ export declare namespace CallSound {
     type RingtoneSetting = {
         mode: 'default';
     } | Bundled;
-    /** Whether the configured call-ended sound is enabled. */
+    /**
+     * Whether the single call-ended sound configured at build time is enabled.
+     * CallKit may still produce system feedback independently on iOS.
+     */
     type CallEndedSetting = {
         mode: 'enabled';
     } | {
@@ -26,7 +29,7 @@ export declare namespace CallSound {
         ringtone: RingtoneSetting;
         callEnded: CallEndedSetting;
     };
-    /** A selectable ringtone installed in the native application. */
+    /** A selectable ringtone installed in the native application at build time. */
     type AvailableSound = {
         id: string;
         displayName: string;

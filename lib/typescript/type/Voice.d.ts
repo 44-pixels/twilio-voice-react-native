@@ -2,6 +2,11 @@ import type { Constants } from '../constants';
 import type { NativeAudioDevicesUpdatedEvent } from './AudioDevice';
 import type { NativeCallInviteInfo } from './CallInvite';
 import type { NativeErrorEvent } from './Error';
+export interface NativeCallbackRequestedEvent {
+    [Constants.VoiceEventType]: Constants.VoiceEventCallbackRequested;
+    [Constants.CallbackRequestKeyRequestId]: string;
+    [Constants.CallbackRequestKeyHandle]: string;
+}
 export interface NativeRegisteredEvent {
     type: Constants.VoiceEventRegistered;
 }
@@ -12,5 +17,5 @@ export interface NativeCallInviteIncomingEvent {
     [Constants.VoiceEventType]: Constants.VoiceEventTypeValueIncomingCallInvite;
     callInvite: NativeCallInviteInfo;
 }
-export type NativeVoiceEvent = NativeAudioDevicesUpdatedEvent | NativeCallInviteIncomingEvent | NativeErrorEvent | NativeRegisteredEvent | NativeUnregisteredEvent;
-export type NativeVoiceEventType = Constants.VoiceEventAudioDevicesUpdated | Constants.VoiceEventTypeValueIncomingCallInvite | Constants.VoiceEventError | Constants.VoiceEventRegistered | Constants.VoiceEventUnregistered;
+export type NativeVoiceEvent = NativeAudioDevicesUpdatedEvent | NativeCallbackRequestedEvent | NativeCallInviteIncomingEvent | NativeErrorEvent | NativeRegisteredEvent | NativeUnregisteredEvent;
+export type NativeVoiceEventType = Constants.VoiceEventAudioDevicesUpdated | Constants.VoiceEventCallbackRequested | Constants.VoiceEventTypeValueIncomingCallInvite | Constants.VoiceEventError | Constants.VoiceEventRegistered | Constants.VoiceEventUnregistered;

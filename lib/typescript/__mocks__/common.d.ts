@@ -50,6 +50,8 @@ export declare const NativeModule: {
      */
     voice_connect_android: jest.Mock<any, any>;
     voice_connect_ios: jest.Mock<any, any>;
+    voice_clearCallbackRequest: jest.Mock<any, any>;
+    voice_getInitialCallbackRequest: jest.Mock<any, any>;
     voice_getAudioDevices: jest.Mock<any, any>;
     voice_getCalls: jest.Mock<any, any>;
     voice_getCallInvites: jest.Mock<any, any>;
@@ -60,6 +62,11 @@ export declare const NativeModule: {
     voice_register: jest.Mock<any, any>;
     voice_selectAudioDevice: jest.Mock<any, any>;
     voice_setCallKitConfiguration: jest.Mock<any, any>;
+    voice_setCallSoundSettings: jest.Mock<any, any>;
+    voice_getCallSoundSettings: jest.Mock<any, any>;
+    voice_getAvailableRingtones: jest.Mock<any, any>;
+    voice_previewCallSound: jest.Mock<any, any>;
+    voice_stopCallSoundPreview: jest.Mock<any, any>;
     voice_showNativeAvRoutePicker: jest.Mock<any, any>;
     voice_setIncomingCallContactHandleTemplate: jest.Mock<any, any>;
     voice_unregister: jest.Mock<any, any>;

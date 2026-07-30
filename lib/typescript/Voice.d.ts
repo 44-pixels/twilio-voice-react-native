@@ -11,8 +11,9 @@ import { CallInvite } from './CallInvite';
 import type { TwilioError } from './error/TwilioError';
 import { PreflightTest } from './PreflightTest';
 import type { CallKit } from './type/CallKit';
-import type { CallSound } from './type/CallSound';
 import type { Uuid } from './type/common';
+import type { CallbackRequest as CallbackRequestInfo } from './type/CallbackRequest';
+import type { CallSound } from './type/CallSound';
 /**
  * Defines strict typings for all events emitted by {@link (Voice:class)
  * | Voice objects}.
@@ -36,6 +37,8 @@ export declare interface Voice {
     emit(voiceEvent: Voice.Event.AudioDevicesUpdated, audioDevices: AudioDevice[], selectedDevice?: AudioDevice): boolean;
     /** @internal */
     emit(voiceEvent: Voice.Event.CallInvite, callInvite: CallInvite): boolean;
+    /** @internal */
+    emit(voiceEvent: Voice.Event.CallbackRequested, request: Voice.CallbackRequest): boolean;
     /** @internal */
     emit(voiceEvent: Voice.Event.Error, error: TwilioError): boolean;
     /** @internal */
@@ -86,6 +89,12 @@ export declare interface Voice {
     addListener(callInviteEvent: Voice.Event.CallInvite, listener: Voice.Listener.CallInvite): this;
     /** {@inheritDoc (Voice:interface).(addListener:2)} */
     on(callInviteEvent: Voice.Event.CallInvite, listener: Voice.Listener.CallInvite): this;
+    /**
+     * Raised when the user requests a callback from system call history.
+     */
+    addListener(callbackRequestedEvent: Voice.Event.CallbackRequested, listener: Voice.Listener.CallbackRequested): this;
+    /** {@inheritDoc (Voice:interface).(addListener:3)} */
+    on(callbackRequestedEvent: Voice.Event.CallbackRequested, listener: Voice.Listener.CallbackRequested): this;
     /**
      * Error event. Raised when the SDK encounters an error.
      *
@@ -215,6 +224,10 @@ export declare class Voice extends EventEmitter {
      */
     private _handleCallInvite;
     /**
+     * Callback request handler.
+     */
+    private _handleCallbackRequested;
+    /**
      * Error event handler. Creates an error from the namespace
      * {@link TwilioErrors} from the info raised by the native layer and emits it.
      * @param nativeVoiceEvent - A `Voice` event directly from the native layer.
@@ -261,6 +274,19 @@ export declare class Voice extends EventEmitter {
      *      arguments are passed.
      */
     connect(token: string, { contactHandle, notificationDisplayName, params, }?: Voice.ConnectOptions): Promise<Call>;
+    /**
+     * Mark a callback request as handled so it is not delivered again.
+     */
+    completeCallbackRequest(requestId: string): Promise<void>;
+    /**
+     * Get the pending callback request that launched or resumed the application.
+     *
+     * @remarks
+     * Register a {@link (Voice:namespace).Event.CallbackRequested} listener for
+     * requests received while JavaScript is running. The request remains pending
+     * until {@link (Voice:class).completeCallbackRequest} is called.
+     */
+    getInitialCallbackRequest(): Promise<Voice.CallbackRequest | null>;
     /**
      * Get the version of the native SDK. Note that this is not the version of the
      * React Native SDK, this is the version of the mobile SDK that the RN SDK is
@@ -400,11 +426,11 @@ export declare class Voice extends EventEmitter {
     setCallSoundSettings(settings: CallSound.Settings): Promise<void>;
     /** Return the persisted native call-sound settings. */
     getCallSoundSettings(): Promise<CallSound.Settings>;
-    /** Return selectable ringtones installed by the Expo config plugin. */
+    /** Return sounds installed by the Expo config plugin. */
     getAvailableRingtones(): Promise<CallSound.AvailableSound[]>;
-    /** Preview an installed ringtone. */
+    /** Preview an installed call sound. */
     previewCallSound(soundId: string): Promise<void>;
-    /** Stop the active ringtone preview, if any. */
+    /** Stop the active call-sound preview, if any. */
     stopCallSoundPreview(): Promise<void>;
     /**
      * Set the native call contact handle template.
@@ -524,6 +550,10 @@ export declare class Voice extends EventEmitter {
  */
 export declare namespace Voice {
     /**
+     * A callback request initiated from the system call history.
+     */
+    type CallbackRequest = CallbackRequestInfo;
+    /**
      * Options to pass to the {@link (Voice:class).connect} method.
      */
     type ConnectOptions = {
@@ -572,6 +602,10 @@ export declare namespace Voice {
          * | Voice.addListener(CallInvite)}.
          */
         'CallInvite' = "callInvite",
+        /**
+         * Raised when the user requests a callback from system call history.
+         */
+        'CallbackRequested' = "callbackRequested",
         /**
          * Raised when the SDK encounters an error.
          *
@@ -625,6 +659,8 @@ export declare namespace Voice {
          * See {@link (Voice:interface).(addListener:2)}.
          */
         type CallInvite = (callInvite: CallInvite) => void;
+        /** Callback request event listener. */
+        type CallbackRequested = (request: CallbackRequest) => void;
         /**
          * Error event listener. This should be the function signature of an event
          * listener bound to the
