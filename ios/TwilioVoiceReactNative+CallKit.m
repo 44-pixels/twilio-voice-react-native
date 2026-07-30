@@ -476,9 +476,15 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 
     // Remove the corresponding call invite only when the incoming call is finished.
     [self.callInviteMap removeObjectForKey:call.uuid.UUIDString];
-    
+
     [self stopRingback];
     self.userInitiatedDisconnect = NO;
+
+    // >>> FORK KAR-874 — hold the call in a background block so its final release
+    // (and -[TVOCall dealloc]'s blocking rtc teardown, rtc::Event::Wait) happens
+    // off the main thread instead of freezing the UI on disconnect/connect-failure.
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)call; });
+    // <<< FORK
 }
 
 - (void)call:(TVOCall *)call isReconnectingWithError:(NSError *)error {
