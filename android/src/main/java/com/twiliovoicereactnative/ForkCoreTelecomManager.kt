@@ -19,6 +19,7 @@ import androidx.core.telecom.CallEndpointCompat
 import androidx.core.telecom.CallsManager
 import com.twilio.audioswitch.AudioDevice
 import com.twilio.voice.CallException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +45,7 @@ internal object ForkCoreTelecomManager {
   const val ANSWER_PENDING = 1
 
   private const val ENDPOINT_WAIT_TIMEOUT_MILLIS = 1_500L
+  private const val CALL_ENDED_WAIT_TIMEOUT_MILLIS = 4_000L
 
   private val logger = SDKLog(ForkCoreTelecomManager::class.java)
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -60,6 +62,7 @@ internal object ForkCoreTelecomManager {
   private var appAnswerInFlight = false
   private var answerPermitUuid: UUID? = null
   private var telecomDisconnectUuid: UUID? = null
+  private var telecomDisconnectFinished: CompletableDeferred<Unit>? = null
 
   @JvmStatic
   fun isAvailable(context: Context): Boolean =
@@ -152,6 +155,14 @@ internal object ForkCoreTelecomManager {
     callRecord: CallRecordDatabase.CallRecord,
     callException: CallException?,
   ) {
+    val telecomCompletion = synchronized(stateLock) {
+      if (telecomDisconnectUuid == callRecord.uuid) telecomDisconnectFinished else null
+    }
+    if (telecomCompletion != null) {
+      telecomCompletion.complete(Unit)
+      return
+    }
+
     val disconnectedByTelecom = synchronized(stateLock) {
       telecomDisconnectUuid == callRecord.uuid
     }
@@ -246,10 +257,22 @@ internal object ForkCoreTelecomManager {
             }
           },
           onDisconnect = {
-            synchronized(stateLock) { telecomDisconnectUuid = callRecord.uuid }
+            val waitsForCallEndedSound = callRecord.voiceCall != null
+            val callEnded = if (waitsForCallEndedSound) CompletableDeferred<Unit>() else null
+            synchronized(stateLock) {
+              telecomDisconnectUuid = callRecord.uuid
+              telecomDisconnectFinished = callEnded
+            }
             ForkTwilioVoiceThread.runBlocking {
               val api = VoiceApplicationProxy.getVoiceServiceApi()
               if (callRecord.voiceCall == null) api.rejectCall(callRecord) else api.disconnect(callRecord)
+            }
+            if (callEnded != null) {
+              val didFinish = withTimeoutOrNull(CALL_ENDED_WAIT_TIMEOUT_MILLIS) {
+                callEnded.await()
+                true
+              } ?: false
+              if (!didFinish) logger.warning("Timed out waiting for call-ended sound")
             }
           },
           onSetActive = {
@@ -501,6 +524,8 @@ internal object ForkCoreTelecomManager {
     appAnswerInFlight = false
     answerPermitUuid = null
     telecomDisconnectUuid = null
+    telecomDisconnectFinished?.complete(Unit)
+    telecomDisconnectFinished = null
   }
 
   private fun normalizedIncomingAddress(callRecord: CallRecordDatabase.CallRecord): String {

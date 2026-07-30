@@ -1,7 +1,7 @@
 // FORK — KAR-787
 // Owns: Persisted call-sound settings, bundled sound discovery, and native playback.
-// Hooks into: ExpoModule, TwilioVoiceReactNativeModule, MediaPlayerManager, ForkRingerPool,
-// and ForkCallIssueState.
+// Hooks into: ExpoModule, TwilioVoiceReactNativeModule, ForkCallLifecycleCoordinator,
+// ForkRingerPool, and ForkCallIssueState.
 // Re-check on SDK bump: native promise serialization and call audio usage attributes.
 package com.twiliovoicereactnative;
 
@@ -12,6 +12,8 @@ import android.media.AudioAttributes;
 import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableArray;
@@ -41,10 +43,29 @@ public final class ForkCallSounds {
   private static final String CONNECTED_RESOURCE = "twilio_voice_connected";
   private static final String HAS_ISSUES_RESOURCE = "twilio_voice_has_issues";
   private static final String OS_RINGTONE_ID = "os-ringtone";
+  private static final long CALL_ENDED_TIMEOUT_MILLIS = 3_000;
 
+  private static final SDKLog logger = new SDKLog(ForkCallSounds.class);
+  private static final Handler mainHandler = new Handler(Looper.getMainLooper());
   private static MediaPlayer previewPlayer;
-  private static MediaPlayer callEndedPlayer;
+  private static CallEndedPlayback callEndedPlayback;
   private static MediaPlayer connectionStatusPlayer;
+
+  private static final class CallEndedPlayback {
+    private final MediaPlayer player;
+    private final Runnable onFinished;
+    private final Runnable timeout;
+    private boolean finished;
+
+    private CallEndedPlayback(MediaPlayer player, Runnable onFinished) {
+      this.player = player;
+      this.onFinished = onFinished;
+      this.timeout = () -> {
+        logger.warning("Timed out playing call-ended sound");
+        finishCallEndedPlayback(this);
+      };
+    }
+  }
 
   private ForkCallSounds() {}
 
@@ -143,31 +164,64 @@ public final class ForkCallSounds {
     return configuredResourceId == 0 ? defaultResourceId : configuredResourceId;
   }
 
-  static boolean handleCallEnded(Context context) {
+  static void playCallEnded(Context context, Runnable onFinished) {
+    runOnMainThread(() -> startCallEndedPlayback(context, onFinished));
+  }
+
+  private static void startCallEndedPlayback(Context context, Runnable onFinished) {
     stopConnectionStatusSound();
+    finishCallEndedPlayback(callEndedPlayback);
+
     SharedPreferences preferences = preferences(context);
     String mode = preferences.getString(PREF_CALL_ENDED_MODE, MODE_ENABLED);
-    if (MODE_DISABLED.equals(mode)) return true;
+    if (MODE_DISABLED.equals(mode)) {
+      onFinished.run();
+      return;
+    }
 
-    int resourceId = callEndedResourceId(context);
-    if (resourceId == 0) return false;
-
-    release(callEndedPlayer);
-    callEndedPlayer = createPlayer(
+    int configuredResourceId = callEndedResourceId(context);
+    int resourceId = configuredResourceId == 0 ? R.raw.disconnect : configuredResourceId;
+    MediaPlayer player = createPlayer(
       context,
       resourceId,
       AudioAttributes.USAGE_VOICE_COMMUNICATION,
       false
     );
-    if (callEndedPlayer != null) {
-      callEndedPlayer.setVolume(CALL_SOUND_VOLUME, CALL_SOUND_VOLUME);
-      callEndedPlayer.setOnCompletionListener(player -> {
-        player.release();
-        if (callEndedPlayer == player) callEndedPlayer = null;
-      });
-      callEndedPlayer.start();
+    if (player == null) {
+      onFinished.run();
+      return;
     }
-    return true;
+    if (configuredResourceId != 0) {
+      player.setVolume(CALL_SOUND_VOLUME, CALL_SOUND_VOLUME);
+    }
+
+    CallEndedPlayback playback = new CallEndedPlayback(player, onFinished);
+    callEndedPlayback = playback;
+    player.setOnCompletionListener(completedPlayer -> finishCallEndedPlayback(playback));
+    player.setOnErrorListener((failedPlayer, what, extra) -> {
+      finishCallEndedPlayback(playback);
+      return true;
+    });
+    mainHandler.postDelayed(playback.timeout, CALL_ENDED_TIMEOUT_MILLIS);
+
+    try {
+      player.start();
+    } catch (RuntimeException error) {
+      logger.warning(error, "Failed to start call-ended sound");
+      finishCallEndedPlayback(playback);
+    }
+  }
+
+  private static void finishCallEndedPlayback(CallEndedPlayback playback) {
+    if (playback == null || playback.finished) return;
+
+    playback.finished = true;
+    mainHandler.removeCallbacks(playback.timeout);
+    if (callEndedPlayback == playback) callEndedPlayback = null;
+    playback.player.setOnCompletionListener(null);
+    playback.player.setOnErrorListener(null);
+    playback.player.release();
+    playback.onFinished.run();
   }
 
   static void playConnectedSound() {
@@ -380,6 +434,14 @@ public final class ForkCallSounds {
   private static void stopPreview() {
     release(previewPlayer);
     previewPlayer = null;
+  }
+
+  private static void runOnMainThread(Runnable operation) {
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      operation.run();
+    } else {
+      mainHandler.post(operation);
+    }
   }
 
   private static void release(MediaPlayer player) {

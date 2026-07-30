@@ -192,11 +192,8 @@ class CallListenerProxy implements Call.Listener {
     if (callRecord == null) return;
     // <<< FORK
     // stop audio & cancel notification
-    getMediaPlayerManager().stop();
-    getMediaPlayerManager().play(MediaPlayerManager.SoundTable.DISCONNECT);
-    getVoiceServiceApi().cancelActiveCallNotification(callRecord);
-    // >>> FORK KAR-443 — release only after owner-scoped cleanup
-    ForkCallLifecycleCoordinator.twilioDisconnected(callRecord, callException);
+    // >>> FORK KAR-443, KAR-787 — retain the call route through the call-ended sound
+    ForkCallLifecycleCoordinator.twilioDisconnectedWithSound(context, callRecord, callException);
     // <<< FORK
 
     // notify JS layer

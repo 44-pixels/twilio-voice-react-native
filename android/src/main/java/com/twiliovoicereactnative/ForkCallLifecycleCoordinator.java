@@ -191,6 +191,18 @@ final class ForkCallLifecycleCoordinator {
     }
   }
 
+  static void twilioDisconnectedWithSound(
+    @NonNull Context context,
+    @NonNull CallRecordDatabase.CallRecord callRecord,
+    @Nullable CallException callException
+  ) {
+    VoiceApplicationProxy.getMediaPlayerManager().stop();
+    ForkCallSounds.playCallEnded(context, () -> {
+      VoiceApplicationProxy.getVoiceServiceApi().cancelActiveCallNotification(callRecord);
+      twilioDisconnected(callRecord, callException);
+    });
+  }
+
   static void twilioDisconnected(@NonNull CallRecordDatabase.CallRecord callRecord,
                                  @Nullable CallException callException) {
     CallState state = stateFor(
