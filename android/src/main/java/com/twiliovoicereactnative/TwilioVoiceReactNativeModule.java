@@ -280,6 +280,18 @@ public class TwilioVoiceReactNativeModule extends ReactContextBaseJavaModule {
     );
   }
 
+  // >>> FORK KAR-873 — see ForkCallbackRequestStore
+  @ReactMethod
+  public void voice_clearCallbackRequest(String requestId, Promise promise) {
+    this.moduleProxy.voice.clearCallbackRequest(requestId, new PromiseAdapter(promise));
+  }
+
+  @ReactMethod
+  public void voice_getInitialCallbackRequest(Promise promise) {
+    this.moduleProxy.voice.getInitialCallbackRequest(new PromiseAdapter(promise));
+  }
+  // <<< FORK
+
   @ReactMethod
   public void voice_getAudioDevices(Promise promise) {
     this.moduleProxy.voice.getAudioDevices(new PromiseAdapter(promise));

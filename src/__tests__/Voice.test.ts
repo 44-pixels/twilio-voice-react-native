@@ -81,6 +81,9 @@ describe('Voice class', () => {
         const nativeEventHandler = voice['_nativeEventHandler'];
         [
           Constants.VoiceEventAudioDevicesUpdated,
+          // >>> FORK KAR-873 — see type/CallbackRequest.ts
+          Constants.VoiceEventCallbackRequested,
+          // <<< FORK
           Constants.VoiceEventTypeValueIncomingCallInvite,
           Constants.VoiceEventError,
           Constants.VoiceEventRegistered,
@@ -220,6 +223,31 @@ describe('Voice class', () => {
         expect(callInvite).toBeInstanceOf(MockCallInvite);
       });
     });
+
+    // >>> FORK KAR-873 — see type/CallbackRequest.ts
+    describe(Constants.VoiceEventCallbackRequested, () => {
+      it('emits the callback request', () => {
+        const voice = new Voice();
+        const listenerMock = jest.fn();
+        voice.on(Voice.Event.CallbackRequested, listenerMock);
+
+        MockNativeEventEmitter.emit(
+          Constants.ScopeVoice,
+          mockVoiceNativeEvents.callbackRequested.nativeEvent
+        );
+
+        expect(listenerMock.mock.calls).toEqual([
+          [
+            {
+              requestId: 'mock-callback-request-id',
+              handle: '+15551234567',
+            },
+          ],
+        ]);
+      });
+    });
+
+    // <<< FORK
 
     describe(Constants.VoiceEventError, () => {
       it('emits an error', async () => {
@@ -580,6 +608,50 @@ describe('Voice class', () => {
         });
       });
     });
+
+    // >>> FORK KAR-873 — see type/CallbackRequest.ts
+    describe('.completeCallbackRequest', () => {
+      it('invokes the native module', async () => {
+        await new Voice().completeCallbackRequest('mock-callback-request-id');
+        expect(MockNativeModule.voice_clearCallbackRequest).toHaveBeenCalledWith(
+          'mock-callback-request-id'
+        );
+      });
+    });
+
+    describe('.getInitialCallbackRequest', () => {
+      it('invokes the native module', () => {
+        new Voice().getInitialCallbackRequest();
+        expect(
+          jest.mocked(MockNativeModule.voice_getInitialCallbackRequest).mock
+            .calls
+        ).toEqual([[]]);
+      });
+
+      it('resolves the callback request', async () => {
+        const request = {
+          requestId: 'mock-callback-request-id',
+          handle: '+15551234567',
+        };
+        jest
+          .mocked(MockNativeModule.voice_getInitialCallbackRequest)
+          .mockReturnValueOnce(
+            Promise.resolve(mockNativePromiseResolutionValue(request))
+          );
+
+        await expect(new Voice().getInitialCallbackRequest()).resolves.toEqual(
+          request
+        );
+      });
+
+      it('resolves null when there is no callback request', async () => {
+        await expect(
+          new Voice().getInitialCallbackRequest()
+        ).resolves.toBeNull();
+      });
+    });
+
+    // <<< FORK
 
     describe('.getVersion', () => {
       it('invokes the native module', () => {

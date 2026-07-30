@@ -19,6 +19,9 @@
 // >>> FORK KAR-381 — see ForkE164.h
 #import "ForkE164.h"
 // <<< FORK
+// >>> FORK KAR-873 — see ForkCallbackRequestStore
+#import "ForkCallbackRequestStore.h"
+// <<< FORK
 
 NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native";
 
@@ -117,6 +120,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     CXHandleType forkHandleType = (forkHandleIsE164 || forkFallbackIsE164) ? CXHandleTypePhoneNumber : CXHandleTypeGeneric;
     NSString *forkHandleValue = forkHandleIsE164 ? handleName : (forkFallbackIsE164 ? forkPhoneFallback : handleName);
     CXHandle *callHandle = [[CXHandle alloc] initWithType:forkHandleType value:forkHandleValue];
+    // >>> FORK KAR-873 — see ForkCallbackRequestStore
+    [ForkCallbackRequestStore fork_rememberHandle:forkHandleValue destination:callInvite.from];
+    // <<< FORK
 
     CXCallUpdate *callUpdate = [[CXCallUpdate alloc] init];
     callUpdate.remoteHandle = callHandle;
@@ -179,6 +185,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     }
 
     CXHandle *callHandle = [[CXHandle alloc] initWithType:CXHandleTypeGeneric value:handle];
+    // >>> FORK KAR-873 — see ForkCallbackRequestStore
+    [ForkCallbackRequestStore fork_rememberHandle:handle destination:self.twimlParams[@"to"]];
+    // <<< FORK
     NSUUID *uuid = [NSUUID UUID];
     CXStartCallAction *startCallAction = [[CXStartCallAction alloc] initWithCallUUID:uuid handle:callHandle];
     CXTransaction *transaction = [[CXTransaction alloc] initWithAction:startCallAction];

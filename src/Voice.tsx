@@ -21,6 +21,9 @@ import type { NativeCallInfo } from './type/Call';
 import type { NativeCallInviteInfo } from './type/CallInvite';
 import type { CallKit } from './type/CallKit';
 import type { CustomParameters, Uuid } from './type/common';
+// >>> FORK KAR-873 — see type/CallbackRequest.ts
+import type { CallbackRequest as CallbackRequestInfo } from './type/CallbackRequest';
+// <<< FORK
 import type { NativeVoiceEvent, NativeVoiceEventType } from './type/Voice';
 import { validatePreflightOptions } from './utility/preflightTestOptions';
 import { settleNativePromise } from './utility/nativePromise';
@@ -57,6 +60,14 @@ export declare interface Voice {
 
   /** @internal */
   emit(voiceEvent: Voice.Event.CallInvite, callInvite: CallInvite): boolean;
+
+  // >>> FORK KAR-873 — see type/CallbackRequest.ts
+  /** @internal */
+  emit(
+    voiceEvent: Voice.Event.CallbackRequested,
+    request: Voice.CallbackRequest
+  ): boolean;
+  // <<< FORK
 
   /** @internal */
   emit(voiceEvent: Voice.Event.Error, error: TwilioError): boolean;
@@ -126,6 +137,21 @@ export declare interface Voice {
     callInviteEvent: Voice.Event.CallInvite,
     listener: Voice.Listener.CallInvite
   ): this;
+
+  // >>> FORK KAR-873 — see type/CallbackRequest.ts
+  /**
+   * Raised when the user requests a callback from system call history.
+   */
+  addListener(
+    callbackRequestedEvent: Voice.Event.CallbackRequested,
+    listener: Voice.Listener.CallbackRequested
+  ): this;
+  /** {@inheritDoc (Voice:interface).(addListener:3)} */
+  on(
+    callbackRequestedEvent: Voice.Event.CallbackRequested,
+    listener: Voice.Listener.CallbackRequested
+  ): this;
+  // <<< FORK
 
   /**
    * Error event. Raised when the SDK encounters an error.
@@ -265,6 +291,9 @@ export class Voice extends EventEmitter {
        * Common
        */
       [Constants.VoiceEventError]: this._handleError,
+      // >>> FORK KAR-873 — see type/CallbackRequest.ts
+      [Constants.VoiceEventCallbackRequested]: this._handleCallbackRequested,
+      // <<< FORK
 
       /**
        * Call Invite
@@ -362,6 +391,23 @@ export class Voice extends EventEmitter {
 
     this.emit(Voice.Event.CallInvite, callInvite);
   };
+
+  // >>> FORK KAR-873 — see type/CallbackRequest.ts
+  /**
+   * Callback request handler.
+   */
+  private _handleCallbackRequested = (nativeVoiceEvent: NativeVoiceEvent) => {
+    if (nativeVoiceEvent.type !== Constants.VoiceEventCallbackRequested) {
+      throw new Error(
+        'Incorrect "voice#callbackRequested" handler called for type ' +
+          `"${nativeVoiceEvent.type}".`
+      );
+    }
+
+    const { requestId, handle } = nativeVoiceEvent;
+    this.emit(Voice.Event.CallbackRequested, { requestId, handle });
+  };
+  // <<< FORK
 
   /**
    * Error event handler. Creates an error from the namespace
@@ -514,6 +560,29 @@ export class Voice extends EventEmitter {
         );
     }
   }
+
+  // >>> FORK KAR-873 — see type/CallbackRequest.ts
+  /**
+   * Mark a callback request as handled so it is not delivered again.
+   */
+  async completeCallbackRequest(requestId: string): Promise<void> {
+    return settleNativePromise(
+      NativeModule.voice_clearCallbackRequest(requestId)
+    );
+  }
+
+  /**
+   * Get the pending callback request that launched or resumed the application.
+   *
+   * @remarks
+   * Register a {@link (Voice:namespace).Event.CallbackRequested} listener for
+   * requests received while JavaScript is running. The request remains pending
+   * until {@link (Voice:class).completeCallbackRequest} is called.
+   */
+  async getInitialCallbackRequest(): Promise<Voice.CallbackRequest | null> {
+    return settleNativePromise(NativeModule.voice_getInitialCallbackRequest());
+  }
+  // <<< FORK
 
   /**
    * Get the version of the native SDK. Note that this is not the version of the
@@ -941,6 +1010,13 @@ export class Voice extends EventEmitter {
  * @public
  */
 export namespace Voice {
+  // >>> FORK KAR-873 — see type/CallbackRequest.ts
+  /**
+   * A callback request initiated from the system call history.
+   */
+  export type CallbackRequest = CallbackRequestInfo;
+  // <<< FORK
+
   /**
    * Options to pass to the {@link (Voice:class).connect} method.
    */
@@ -992,6 +1068,13 @@ export namespace Voice {
      * | Voice.addListener(CallInvite)}.
      */
     'CallInvite' = 'callInvite',
+
+    // >>> FORK KAR-873 — see type/CallbackRequest.ts
+    /**
+     * Raised when the user requests a callback from system call history.
+     */
+    'CallbackRequested' = 'callbackRequested',
+    // <<< FORK
 
     /**
      * Raised when the SDK encounters an error.
@@ -1053,6 +1136,11 @@ export namespace Voice {
      * See {@link (Voice:interface).(addListener:2)}.
      */
     export type CallInvite = (callInvite: CallInvite) => void;
+
+    // >>> FORK KAR-873 — see type/CallbackRequest.ts
+    /** Callback request event listener. */
+    export type CallbackRequested = (request: CallbackRequest) => void;
+    // <<< FORK
 
     /**
      * Error event listener. This should be the function signature of an event

@@ -11,6 +11,10 @@
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
 #import "TwilioVoiceStatsReport.h"
+// >>> FORK KAR-873 — see TwilioVoiceReactNative+ForkCallbackRequest
+#import "ForkCallbackRequestStore.h"
+#import "TwilioVoiceReactNative+ForkCallbackRequest.h"
+// <<< FORK
 
 NSString * const kTwilioVoiceReactNativeVoiceError = @"Voice error";
 dispatch_time_t const kPushRegistryDeviceTokenRetryTimeout = 3;
@@ -118,6 +122,10 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
                                              selector:@selector(handleRouteChange:)
                                                  name:AVAudioSessionRouteChangeNotification
                                                object:nil];
+
+    // >>> FORK KAR-873 — see TwilioVoiceReactNative+ForkCallbackRequest
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(fork_handleCallbackRequestNotification:) name:ForkCallbackRequestReceivedNotification object:nil];
+    // <<< FORK
 }
 
 - (void)dealloc {

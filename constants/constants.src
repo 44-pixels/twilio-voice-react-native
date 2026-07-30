@@ -13,6 +13,11 @@ ScopePreflightTest=scopePreflightTest
 // Common
 VoiceEventError=voiceEventError
 VoiceEventType=type
+// >>> FORK KAR-873 — see CallbackRequest.ts
+VoiceEventCallbackRequested=voiceEventCallbackRequested
+CallbackRequestKeyRequestId=requestId
+CallbackRequestKeyHandle=handle
+// <<< FORK
 
 // Error
 VoiceErrorKeyError=error

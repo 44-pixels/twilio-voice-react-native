@@ -84,6 +84,10 @@ export const NativeModule = {
    */
   voice_connect_android: createMockWithResolvedValue(createNativeCallInfo()),
   voice_connect_ios: createMockWithResolvedValue(createNativeCallInfo()),
+  // >>> FORK KAR-873 — see type/CallbackRequest.ts
+  voice_clearCallbackRequest: createMockWithResolvedValue(undefined),
+  voice_getInitialCallbackRequest: createMockWithResolvedValue(null),
+  // <<< FORK
   voice_getAudioDevices: createMockWithResolvedValue(
     createNativeAudioDevicesInfo()
   ),

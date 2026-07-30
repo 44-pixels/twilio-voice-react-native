@@ -16,6 +16,11 @@ public class CommonConstants {
   // Common
   public static final String VoiceEventError = "voiceEventError";
   public static final String VoiceEventType = "type";
+  // >>> FORK KAR-873 — see CallbackRequest.ts
+  public static final String VoiceEventCallbackRequested = "voiceEventCallbackRequested";
+  public static final String CallbackRequestKeyRequestId = "requestId";
+  public static final String CallbackRequestKeyHandle = "handle";
+  // <<< FORK
 
   // Error
   public static final String VoiceErrorKeyError = "error";

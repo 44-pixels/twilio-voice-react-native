@@ -1,5 +1,7 @@
-// FORK — KAR-492
-// Expo config plugin for native-first Twilio Voice FCM handling in prebuilt apps.
+// FORK — KAR-492, KAR-787, KAR-873
+// Owns: Expo native configuration for messaging, sounds, and callbacks.
+// Hooks into: generated Android manifest/resources and iOS AppDelegate/Info.plist.
+// Re-check on SDK bump: Expo config-mod APIs and generated AppDelegate shape.
 
 const fs = require('fs');
 const path = require('path');
@@ -8,7 +10,9 @@ const {
   IOSConfig,
   createRunOncePlugin,
   withAndroidManifest,
+  withAppDelegate,
   withDangerousMod,
+  withInfoPlist,
   withXcodeProject,
 } = require('@expo/config-plugins');
 
@@ -307,7 +311,103 @@ function messagingEventFilter() {
   };
 }
 
+function withCallbackAppDelegate(config) {
+  return withAppDelegate(config, configWithAppDelegate => {
+    const appDelegate = configWithAppDelegate.modResults;
+    if (appDelegate.language !== 'swift') {
+      throw new Error(
+        'Twilio Voice call-history callbacks require a Swift AppDelegate'
+      );
+    }
+    if (!appDelegate.contents.includes('import TwilioVoiceReactNative')) {
+      const importMatches = [
+        ...appDelegate.contents.matchAll(/^import\s+[^\r\n]+/gm),
+      ];
+      const lastImport = importMatches[importMatches.length - 1];
+      const callbackImport = `
+// >>> FORK KAR-873 — see ForkCallbackRequestStore
+import TwilioVoiceReactNative
+// <<< FORK`;
+      if (lastImport && typeof lastImport.index === 'number') {
+        const importEnd = lastImport.index + lastImport[0].length;
+        appDelegate.contents =
+          appDelegate.contents.slice(0, importEnd) +
+          callbackImport +
+          appDelegate.contents.slice(importEnd);
+      } else {
+        appDelegate.contents = `${callbackImport.slice(1)}\n\n${appDelegate.contents}`;
+      }
+    }
+
+    if (appDelegate.contents.includes('ForkCallbackRequestStore.handle(userActivity)')) {
+      return configWithAppDelegate;
+    }
+
+    const callbackHook = `    // >>> FORK KAR-873 — see ForkCallbackRequestStore
+    if ForkCallbackRequestStore.handle(userActivity) {
+      return true
+    }
+    // <<< FORK
+`;
+    const existingHandler = /(?:public\s+)?(?:override\s+)?func\s+application\s*\(\s*_\s+\w+:\s*UIApplication,\s*continue\s+userActivity:\s*NSUserActivity,[\s\S]*?\)\s*->\s*Bool\s*\{/m;
+    if (existingHandler.test(appDelegate.contents)) {
+      appDelegate.contents = appDelegate.contents.replace(
+        existingHandler,
+        matchedHandler => `${matchedHandler}\n${callbackHook}`
+      );
+      return configWithAppDelegate;
+    }
+    if (/continue\s+userActivity:\s*NSUserActivity/.test(appDelegate.contents)) {
+      throw new Error(
+        'Unable to compose Twilio Voice with the existing continueUserActivity handler'
+      );
+    }
+
+    const finalClassBrace = appDelegate.contents.lastIndexOf('\n}');
+    if (finalClassBrace < 0) {
+      throw new Error('Unable to add Twilio Voice callback handling to AppDelegate');
+    }
+
+    const callbackMethod = `
+  override func application(
+    _ application: UIApplication,
+    continue userActivity: NSUserActivity,
+    restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+  ) -> Bool {
+${callbackHook}
+    return super.application(
+      application,
+      continue: userActivity,
+      restorationHandler: restorationHandler
+    )
+  }
+`;
+    appDelegate.contents =
+      appDelegate.contents.slice(0, finalClassBrace) +
+      callbackMethod +
+      appDelegate.contents.slice(finalClassBrace);
+    return configWithAppDelegate;
+  });
+}
+
 function withTwilioVoiceFirebaseMessaging(config, props = {}) {
+  config = withCallbackAppDelegate(config);
+  config = withInfoPlist(config, configWithInfoPlist => {
+    const configuredActivityTypes =
+      configWithInfoPlist.modResults.NSUserActivityTypes;
+    const activityTypes = Array.isArray(configuredActivityTypes)
+      ? configuredActivityTypes
+      : [];
+    configWithInfoPlist.modResults.NSUserActivityTypes = [
+      ...new Set([
+        ...activityTypes,
+        'INStartCallIntent',
+        'INStartAudioCallIntent',
+      ]),
+    ];
+    return configWithInfoPlist;
+  });
+
   config = withAndroidManifest(config, configWithManifest => {
     ensureToolsNamespace(configWithManifest.modResults);
     ensureUsesPermission(configWithManifest.modResults, USE_FULL_SCREEN_INTENT);
