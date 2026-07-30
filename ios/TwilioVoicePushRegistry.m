@@ -12,6 +12,7 @@
 #import "TwilioVoicePushRegistry.h"
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
+#import "ForkVoipPushReporter.h"
 
 NSString * const kTwilioVoicePushRegistryNotification = @"TwilioVoicePushRegistryNotification";
 NSString * const kTwilioVoicePushRegistryEventType = @"type";
@@ -55,6 +56,11 @@ didReceiveIncomingPushWithPayload:(PKPushPayload *)payload
              forType:(PKPushType)type
 withCompletionHandler:(void (^)(void))completion {
     if ([type isEqualToString:PKPushTypeVoIP]) {
+        // >>> FORK KAR-869 — report to CallKit synchronously
+        // so iOS doesn't kill the app for an unhandled VoIP push on cold start.
+        [[ForkVoipPushReporter sharedReporter] reportIncomingCallForPushPayload:payload.dictionaryPayload];
+        // <<< FORK
+
         [[NSNotificationCenter defaultCenter] postNotificationName:kTwilioVoicePushRegistryNotification
                                                             object:nil
                                                           userInfo:@{kTwilioVoicePushRegistryEventType: kTwilioVoicePushRegistryNotificationIncomingPushReceived,

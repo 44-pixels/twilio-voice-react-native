@@ -79,6 +79,11 @@ FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallI
 - (NSDictionary *)callInviteInfo:(TVOCallInvite *)callInvite;
 - (NSDictionary *)cancelledCallInviteInfo:(TVOCancelledCallInvite *)cancelledCallInvite;
 
+// >>> FORK KAR-869 — CallKit UUID for an invite: the UUID reserved at push time (see
+// ForkVoipPushReporter), else the invite's own. Single identity for the call.
+- (NSUUID *)effectiveUUIDForCallInvite:(TVOCallInvite *)callInvite;
+// <<< FORK
+
 @end
 
 @interface TwilioVoiceReactNative (PromiseAdapter)
