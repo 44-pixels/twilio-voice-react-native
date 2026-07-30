@@ -250,6 +250,24 @@ class ExpoModule : Module() {
       )
     }
 
+    // >>> FORK KAR-873 — see ForkCallbackRequestStore
+    AsyncFunction("voice_clearCallbackRequest") {
+      requestId: String,
+      promise: Promise ->
+
+      this@ExpoModule.moduleProxy.voice.clearCallbackRequest(
+        requestId,
+        PromiseAdapter(promise)
+      )
+    }
+
+    AsyncFunction("voice_getInitialCallbackRequest") {
+      promise: Promise ->
+
+      this@ExpoModule.moduleProxy.voice.getInitialCallbackRequest(PromiseAdapter(promise))
+    }
+    // <<< FORK
+
     AsyncFunction("voice_getAudioDevices") {
       promise: Promise ->
 

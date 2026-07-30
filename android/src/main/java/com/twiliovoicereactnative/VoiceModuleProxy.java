@@ -122,6 +122,16 @@ class VoiceModuleProxy {
     });
   }
 
+  // >>> FORK KAR-873 — see ForkCallbackRequestStore
+  public void clearCallbackRequest(String requestId, ModuleProxy.UniversalPromise promise) {
+    ForkCallbackRequestStore.clearCallbackRequest(this.reactApplicationContext, requestId, promise);
+  }
+
+  public void getInitialCallbackRequest(ModuleProxy.UniversalPromise promise) {
+    ForkCallbackRequestStore.getInitialCallbackRequest(this.reactApplicationContext, promise);
+  }
+  // <<< FORK
+
   public void getAudioDevices(ModuleProxy.UniversalPromise promise) {
     logger.debug(".getAudioDevices()");
 

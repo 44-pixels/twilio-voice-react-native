@@ -11,6 +11,9 @@ import type { NativeCallInviteInfo } from './CallInvite';
 import type { Uuid } from './common';
 import type { RTCStats } from './RTCStats';
 import type { Constants } from '../constants';
+// >>> FORK KAR-873 — see CallbackRequest.ts
+import type { CallbackRequest } from './CallbackRequest';
+// <<< FORK
 // >>> FORK KAR-787 — see CallSound.ts
 import type { CallSound } from './CallSound';
 // <<< FORK
@@ -106,6 +109,10 @@ export interface TwilioVoiceReactNative extends NativeModulesStatic {
     contactHandle: string
   ): NativePromise<NativeCallInfo>;
   voice_initializePushRegistry(): NativePromise<void>;
+  // >>> FORK KAR-873 — see CallbackRequest.ts
+  voice_clearCallbackRequest(requestId: string): NativePromise<void>;
+  voice_getInitialCallbackRequest(): NativePromise<CallbackRequest | null>;
+  // <<< FORK
   voice_setCallKitConfiguration(
     configuration: Record<string, any>
   ): NativePromise<void>;

@@ -1,4 +1,4 @@
-// FORK — KAR-443
+// FORK — KAR-443, KAR-873
 // Owns: Jetpack Telecom lifecycle, call arbitration, hold/resume, and audio routing.
 // Hooks into: ForkTelecomManager.
 // Re-check on SDK bump: CallsManager.addCall callback contracts, foreground support,
@@ -242,6 +242,7 @@ internal object ForkCoreTelecomManager {
       try {
         val callsManager = CallsManager(appContext)
         callsManager.registerAppWithTelecom(CallsManager.CAPABILITY_BASELINE)
+        ForkLegacyCallLog.enable(appContext)
 
         callsManager.addCall(
           attributes(appContext, callRecord, callDirection),
@@ -287,6 +288,11 @@ internal object ForkCoreTelecomManager {
           },
         ) {
           val callControl = this
+          ForkCallbackRequestStore.rememberCall(
+            appContext,
+            getCallId().uuid,
+            callbackHandle(callRecord),
+          )
           val pendingActions = synchronized(stateLock) {
             if (managedRecord?.uuid != callRecord.uuid) {
               PendingActions(null, false, false)
@@ -354,6 +360,14 @@ internal object ForkCoreTelecomManager {
       if (managedRecord?.uuid == callRecord.uuid) registrationJob = job
     }
     job.start()
+  }
+
+  private fun callbackHandle(
+    callRecord: CallRecordDatabase.CallRecord,
+  ): String? = when (callRecord.direction) {
+    CallRecordDatabase.CallRecord.Direction.INCOMING -> callRecord.callInvite?.from
+    CallRecordDatabase.CallRecord.Direction.OUTGOING ->
+      callRecord.customParameters?.get("to")?.takeIf { it.isNotEmpty() }
   }
 
   private fun attributes(

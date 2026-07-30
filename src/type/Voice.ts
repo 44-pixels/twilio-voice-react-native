@@ -3,6 +3,14 @@ import type { NativeAudioDevicesUpdatedEvent } from './AudioDevice';
 import type { NativeCallInviteInfo } from './CallInvite';
 import type { NativeErrorEvent } from './Error';
 
+// >>> FORK KAR-873 — see CallbackRequest.ts
+export interface NativeCallbackRequestedEvent {
+  [Constants.VoiceEventType]: Constants.VoiceEventCallbackRequested;
+  [Constants.CallbackRequestKeyRequestId]: string;
+  [Constants.CallbackRequestKeyHandle]: string;
+}
+// <<< FORK
+
 export interface NativeRegisteredEvent {
   type: Constants.VoiceEventRegistered;
 }
@@ -18,6 +26,9 @@ export interface NativeCallInviteIncomingEvent {
 
 export type NativeVoiceEvent =
   | NativeAudioDevicesUpdatedEvent
+  // >>> FORK KAR-873 — see CallbackRequest.ts
+  | NativeCallbackRequestedEvent
+  // <<< FORK
   | NativeCallInviteIncomingEvent
   | NativeErrorEvent
   | NativeRegisteredEvent
@@ -25,6 +36,9 @@ export type NativeVoiceEvent =
 
 export type NativeVoiceEventType =
   | Constants.VoiceEventAudioDevicesUpdated
+  // >>> FORK KAR-873 — see CallbackRequest.ts
+  | Constants.VoiceEventCallbackRequested
+  // <<< FORK
   | Constants.VoiceEventTypeValueIncomingCallInvite
   | Constants.VoiceEventError
   | Constants.VoiceEventRegistered

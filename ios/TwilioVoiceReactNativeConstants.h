@@ -22,6 +22,11 @@ static NSString * const kTwilioVoiceReactNativeScopePreflightTest = @"scopePrefl
 // Common
 static NSString * const kTwilioVoiceReactNativeVoiceEventError = @"voiceEventError";
 static NSString * const kTwilioVoiceReactNativeVoiceEventType = @"type";
+// >>> FORK KAR-873 — see CallbackRequest.ts
+static NSString * const kTwilioVoiceReactNativeVoiceEventCallbackRequested = @"voiceEventCallbackRequested";
+static NSString * const kTwilioVoiceReactNativeCallbackRequestKeyRequestId = @"requestId";
+static NSString * const kTwilioVoiceReactNativeCallbackRequestKeyHandle = @"handle";
+// <<< FORK
 
 // Error
 static NSString * const kTwilioVoiceReactNativeVoiceErrorKeyError = @"error";

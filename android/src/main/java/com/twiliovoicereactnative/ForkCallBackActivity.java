@@ -1,7 +1,7 @@
-// FORK — KAR-443
+// FORK — KAR-443, KAR-873
 // Owns: Android Telecom call-log callback trampoline into the host app deep link.
 // Hooks into: AndroidManifest.xml/app.plugin.js.
-// Re-check on SDK bump: TelecomManager.ACTION_CALL_BACK semantics.
+// Re-check on SDK bump: TelecomManager.ACTION_CALL_BACK and EXTRA_UUID semantics.
 package com.twiliovoicereactnative;
 
 import android.app.Activity;
@@ -37,6 +37,16 @@ public final class ForkCallBackActivity extends Activity {
 
   private void handle(@Nullable Intent intent) {
     if (intent == null || !ACTION_CALL_BACK.equals(intent.getAction())) return;
+
+    ForkCallbackRequestStore.CallbackRequest request =
+      ForkCallbackRequestStore.recordCallbackRequest(
+        this,
+        intent.getStringExtra(ForkCallbackRequestStore.EXTRA_UUID));
+    if (request == null) {
+      logger.warning("missing or unknown Telecom callback UUID");
+      return;
+    }
+    VoiceApplicationProxy.emitCallbackRequested(request);
 
     String deepLinkBaseUrl = deepLinkBaseUrl();
     if (deepLinkBaseUrl == null || deepLinkBaseUrl.length() == 0) {

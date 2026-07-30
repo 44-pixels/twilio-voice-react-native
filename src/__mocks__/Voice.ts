@@ -21,6 +21,16 @@ export const mockVoiceNativeEvents = {
       callInvite: createNativeCallInviteInfo(),
     },
   },
+  // >>> FORK KAR-873 — see type/CallbackRequest.ts
+  callbackRequested: {
+    name: Constants.VoiceEventCallbackRequested,
+    nativeEvent: {
+      type: Constants.VoiceEventCallbackRequested,
+      requestId: 'mock-callback-request-id',
+      handle: '+15551234567',
+    },
+  },
+  // <<< FORK
   error: {
     name: Constants.VoiceEventError,
     nativeEvent: {

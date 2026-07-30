@@ -112,6 +112,12 @@ public class VoiceApplicationProxy {
     return VoiceApplicationProxy.instance.jsEventEmitter;
   }
 
+  // >>> FORK KAR-873 — see ForkCallbackRequestStore
+  static void emitCallbackRequested(ForkCallbackRequestStore.CallbackRequest request) {
+    if (instance != null && instance.jsEventEmitter != null) ForkCallbackRequestStore.emit(instance.jsEventEmitter, request);
+  }
+  // <<< FORK
+
   static Context getApplicationContext() {
     return VoiceApplicationProxy.instance.context;
   }

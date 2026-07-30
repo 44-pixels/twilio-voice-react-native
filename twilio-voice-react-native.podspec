@@ -14,6 +14,9 @@ Pod::Spec.new do |s|
   s.source       = { :git => "https://github.com/mhuynh5757/twilio-voice-react-native.git", :tag => "#{s.version}" }
 
   s.source_files = "ios/**/*.{h,m,mm}"
+  # >>> FORK KAR-873 — see ForkCallbackRequestStore.h
+  s.module_name = "TwilioVoiceReactNative"
+  # <<< FORK
 
   s.dependency "React-Core"
   s.dependency "TwilioVoice", "6.13.3"
