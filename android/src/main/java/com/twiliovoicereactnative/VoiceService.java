@@ -60,7 +60,6 @@ import com.twilio.voice.ConnectOptions;
 import com.twilio.voice.Voice;
 
 import java.lang.ref.WeakReference;
-import java.util.Objects;
 import java.util.UUID;
 
 public class VoiceService extends Service {
@@ -188,8 +187,15 @@ public class VoiceService extends Service {
   private void disconnect(final CallRecordDatabase.CallRecord callRecord) {
     logger.debug("disconnect");
     if (null != callRecord) {
-      ForkTwilioVoiceThread.runBlocking(
-        () -> Objects.requireNonNull(callRecord.getVoiceCall()).disconnect());
+      // >>> FORK KAR-876 — only disconnect a live call. Call.disconnect() on an
+      // already-disconnected call segfaults in libtwilio_voice (Sentry KAREN-APP-E4).
+      final Call voiceCall = callRecord.getVoiceCall();
+      if (voiceCall != null && voiceCall.getState() != Call.State.DISCONNECTED) {
+        ForkTwilioVoiceThread.runBlocking(voiceCall::disconnect);
+      } else {
+        logger.warning("disconnect: no live voice call to disconnect");
+      }
+      // <<< FORK
     } else {
       logger.warning("No call record found");
     }
@@ -464,7 +470,12 @@ public class VoiceService extends Service {
         VoiceService.this,
         callRecord);
     if (!createOrReplaceForegroundNotification(callRecord.getNotificationId(), notification)) {
-      callRecord.getVoiceCall().disconnect();
+      // >>> FORK KAR-876 — guard against native segfault on an ended call (Sentry KAREN-APP-E4)
+      final Call voiceCall = callRecord.getVoiceCall();
+      if (voiceCall != null && voiceCall.getState() != Call.State.DISCONNECTED) {
+        voiceCall.disconnect();
+      }
+      // <<< FORK
       return false;
     }
     return true;
