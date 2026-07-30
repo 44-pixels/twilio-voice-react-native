@@ -31,6 +31,9 @@ class ModuleProxy {
       () -> Voice.setLogLevel(BuildConfig.DEBUG ? LogLevel.DEBUG : LogLevel.ERROR));
 
     VoiceApplicationProxy.getJSEventEmitter().setContext(reactApplicationContext);
+    // >>> FORK KAR-492 — deliver FCM token changes retained across cold starts
+    ForkPushTokenChanged.registerContext(reactApplicationContext);
+    // <<< FORK
 
     final AudioSwitchManager audioSwitchManager = VoiceApplicationProxy
       .getAudioSwitchManager()

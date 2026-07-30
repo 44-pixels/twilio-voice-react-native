@@ -12,22 +12,10 @@
 // payload so Twilio recreates the proxy and can receive a real reject.
 package com.twiliovoicereactnative;
 
-import static com.twiliovoicereactnative.CommonConstants.CallInviteEventKeyCallSid;
-import static com.twiliovoicereactnative.CommonConstants.CallInviteEventKeyType;
-import static com.twiliovoicereactnative.CommonConstants.CallInviteEventTypeValueRejected;
-import static com.twiliovoicereactnative.CommonConstants.ScopeCallInvite;
-import static com.twiliovoicereactnative.Constants.JS_EVENT_KEY_CALL_INVITE_INFO;
-import static com.twiliovoicereactnative.JSEventEmitter.constructJSMap;
-import static com.twiliovoicereactnative.ReactNativeArgumentsSerializer.serializeCallInvite;
-import static com.twiliovoicereactnative.VoiceApplicationProxy.getCallRecordDatabase;
-import static com.twiliovoicereactnative.VoiceApplicationProxy.getJSEventEmitter;
-
 import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Pair;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -112,31 +100,7 @@ public final class ForkRejectCallAction {
     ForkCallInviteSettlement.rejectCompetingAction(
       callRecord, ForkCallInviteSettlement.Action.REJECT);
 
-    getCallRecordDatabase().remove(callRecord);
-
-    VoiceService.removeForegroundNotificationIfRunning();
-    VoiceApplicationProxy.getMediaPlayerManager().stop();
-    ForkCallLifecycleCoordinator.deactivateFallbackAudio(callRecord);
-
-    ForkTwilioVoiceThread.runBlocking(
-      () -> callInvite.reject(context.getApplicationContext()));
-    ForkCallLifecycleCoordinator.rejectRequested(callRecord);
-    ForkInvitePayloadStore.clear(callRecord.getCallSid());
-    ForkNotificationIdentity.cancelForCallSid(context, callRecord.getCallSid());
-    ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());
+    ForkCallInviteRejection.rejectClaimed(context, callInvite, callRecord);
     finishDeclineKey(actionKey);
-
-    ForkLockScreenFlags.clearForEndedCall();
-
-    if (callRecord.getCallRejectedPromise() != null) {
-      callRecord.getCallRejectedPromise().resolve(callRecord.getUuid().toString());
-    }
-
-    getJSEventEmitter().sendEvent(
-      ScopeCallInvite,
-      constructJSMap(
-        new Pair<>(CallInviteEventKeyType, CallInviteEventTypeValueRejected),
-        new Pair<>(CallInviteEventKeyCallSid, callRecord.getCallSid()),
-        new Pair<>(JS_EVENT_KEY_CALL_INVITE_INFO, serializeCallInvite(callRecord))));
   }
 }

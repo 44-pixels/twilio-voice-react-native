@@ -102,7 +102,9 @@ class CallListenerProxy implements Call.Listener {
     ForkCallLifecycleCoordinator.activateFallbackAudio(callRecord);
     // <<< FORK
     getMediaPlayerManager().play(MediaPlayerManager.SoundTable.RINGTONE);
-    getVoiceServiceApi().raiseOutgoingCallNotification(callRecord);
+    // >>> FORK KAR-443 — foreground failure terminates without early owner release
+    ForkCallLifecycleCoordinator.outgoingRingingForeground(callRecord, call);
+    // <<< FORK
 
     // notify JS layer
     sendJSEvent(

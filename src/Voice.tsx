@@ -78,6 +78,11 @@ export declare interface Voice {
   /** @internal */
   emit(voiceEvent: Voice.Event.Unregistered): boolean;
 
+  // >>> FORK KAR-492 — Android FCM token-change event
+  /** @internal */
+  emit(voiceEvent: Voice.Event.PushTokenChanged, token: string): boolean;
+  // <<< FORK
+
   /** @internal */
   emit(voiceEvent: Voice.Event, ...args: any[]): boolean;
 
@@ -225,6 +230,19 @@ export declare interface Voice {
     listener: Voice.Listener.Unregistered
   ): this;
 
+  // >>> FORK KAR-492 — Android FCM token-change event
+  /** Raised when Firebase assigns a new Android push token. */
+  addListener(
+    pushTokenChangedEvent: Voice.Event.PushTokenChanged,
+    listener: Voice.Listener.PushTokenChanged
+  ): this;
+  /** Raised when Firebase assigns a new Android push token. */
+  on(
+    pushTokenChangedEvent: Voice.Event.PushTokenChanged,
+    listener: Voice.Listener.PushTokenChanged
+  ): this;
+  // <<< FORK
+
   /**
    * Generic event listener typings.
    * @param voiceEvent - The raised event string.
@@ -233,7 +251,9 @@ export declare interface Voice {
    * @returns - The call object.
    */
   addListener(voiceEvent: Voice.Event, listener: Voice.Listener.Generic): this;
-  /** {@inheritDoc (Voice:interface).(addListener:6)} */
+  // >>> FORK KAR-492 — PushTokenChanged adds the sixth typed overload
+  /** {@inheritDoc (Voice:interface).(addListener:7)} */
+  // <<< FORK
   on(voiceEvent: Voice.Event, listener: Voice.Listener.Generic): this;
 }
 
@@ -305,6 +325,9 @@ export class Voice extends EventEmitter {
        */
       [Constants.VoiceEventRegistered]: this._handleRegistered,
       [Constants.VoiceEventUnregistered]: this._handleUnregistered,
+      // >>> FORK KAR-492 — Android FCM token-change event
+      [Constants.VoiceEventPushTokenChanged]: this._handlePushTokenChanged,
+      // <<< FORK
 
       /**
        * Audio Devices
@@ -318,6 +341,48 @@ export class Voice extends EventEmitter {
       this._handleNativeEvent
     );
   }
+
+  // >>> FORK KAR-492 — deliver persisted token changes only to active subscribers
+  on(voiceEvent: Voice.Event, listener: Voice.Listener.Generic): this {
+    const shouldConsumePushToken =
+      voiceEvent === Voice.Event.PushTokenChanged &&
+      this.listenerCount(Voice.Event.PushTokenChanged) === 0;
+
+    super.on(voiceEvent, listener);
+
+    if (shouldConsumePushToken && Platform.OS === 'android') {
+      this._consumePendingPushToken();
+    }
+
+    return this;
+  }
+
+  addListener(voiceEvent: Voice.Event, listener: Voice.Listener.Generic): this {
+    const shouldConsumePushToken =
+      voiceEvent === Voice.Event.PushTokenChanged &&
+      this.listenerCount(Voice.Event.PushTokenChanged) === 0;
+
+    super.addListener(voiceEvent, listener);
+
+    if (shouldConsumePushToken && Platform.OS === 'android') {
+      this._consumePendingPushToken();
+    }
+
+    return this;
+  }
+
+  private async _consumePendingPushToken(): Promise<void> {
+    const token = await settleNativePromise(
+      NativeModule.voice_consumePendingPushToken()
+    );
+    if (
+      token !== null &&
+      this.listenerCount(Voice.Event.PushTokenChanged) > 0
+    ) {
+      this.emit(Voice.Event.PushTokenChanged, token);
+    }
+  }
+  // <<< FORK
 
   /**
    * Connect for devices on Android platforms.
@@ -458,6 +523,24 @@ export class Voice extends EventEmitter {
 
     this.emit(Voice.Event.Unregistered);
   };
+
+  // >>> FORK KAR-492 — Android FCM token-change event
+  private _handlePushTokenChanged = (nativeVoiceEvent: NativeVoiceEvent) => {
+    if (nativeVoiceEvent.type !== Constants.VoiceEventPushTokenChanged) {
+      throw new Error(
+        'Incorrect "voice#pushTokenChanged" handler called for type ' +
+          `"${nativeVoiceEvent.type}".`
+      );
+    }
+
+    if (
+      Platform.OS === 'android' &&
+      this.listenerCount(Voice.Event.PushTokenChanged) > 0
+    ) {
+      this._consumePendingPushToken();
+    }
+  };
+  // <<< FORK
 
   /**
    * Audio devices updated event handler. Generates a new list of
@@ -1105,6 +1188,11 @@ export namespace Voice {
      * | Voice.addListener(Unregistered)}.
      */
     'Unregistered' = 'unregistered',
+
+    // >>> FORK KAR-492 — Android FCM token-change event
+    /** Raised when Firebase assigns a new Android push token. */
+    'PushTokenChanged' = 'pushTokenChanged',
+    // <<< FORK
   }
 
   /**
@@ -1176,6 +1264,11 @@ export namespace Voice {
      * See {@link (Voice:interface).(addListener:5)}.
      */
     export type Unregistered = () => void;
+
+    // >>> FORK KAR-492 — Android FCM token-change event
+    /** Android FCM token-change event listener. */
+    export type PushTokenChanged = (token: string) => void;
+    // <<< FORK
 
     /**
      * Generic event listener. This should be the function signature of any

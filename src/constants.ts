@@ -29,6 +29,11 @@ export enum Constants {
   'VoiceEventRegistered' = 'voiceEventRegistered',
   'VoiceEventUnregistered' = 'voiceEventUnregistered',
 
+  // >>> FORK KAR-492 — Android FCM token-change event
+  'VoiceEventPushTokenChanged' = 'voiceEventPushTokenChanged',
+  'VoiceEventPushToken' = 'token',
+  // <<< FORK
+
   // Call Info
   'CallInfoUuid' = 'uuid',
   'CallInfoSid' = 'sid',

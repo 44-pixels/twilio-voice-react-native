@@ -34,9 +34,14 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
 
       final CallRecord callRecord = new CallRecord(UUID.randomUUID(), callInvite);
       // >>> FORK KAR-443 — enforce one Twilio call before this invite changes shared state
-      if (!ForkCallLifecycleCoordinator.claimIncoming(
-        getVoiceServiceApi().getServiceContext(),
-        callRecord)) return;
+      try {
+        if (!ForkCallLifecycleCoordinator.claimIncoming(
+          getVoiceServiceApi().getServiceContext(),
+          callRecord)) return;
+        ForkIncomingCallWakeLock.bindToCall(callRecord.getUuid(), payload);
+      } finally {
+        ForkIncomingCallWakeLock.releaseForPayload(payload);
+      }
       // <<< FORK
       // >>> FORK KAR-492 — see ForkInvitePayloadStore.java
       ForkInvitePayloadStore.remember(callInvite, payload);
@@ -57,6 +62,10 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
                                       @Nullable CallException callException) {
       logger.log(String.format("onCancelledCallInvite %s", cancelledCallInvite.getCallSid()));
 
+      // >>> FORK KAR-443 — a cancellation callback never owns an unbound invite wake lock
+      ForkIncomingCallWakeLock.releaseForPayload(payload);
+      // <<< FORK
+
       // >>> FORK KAR-492, KAR-809 — see ForkCancelledInviteCleanup.java
       CallRecord callRecord = ForkCancelledInviteCleanup
         .settleOrCancelNotification(cancelledCallInvite, callException);
@@ -64,7 +73,7 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
       // <<< FORK
 
       // >>> FORK KAR-443, KAR-809 — only the winning settlement changes lifecycle
-      ForkCallLifecycleCoordinator.cancelledInvite(cancelledCallInvite.getCallSid());
+      ForkCallLifecycleCoordinator.cancelledInvite(callRecord);
       ForkCancelledInviteCleanup.removeSettledRecord(callRecord);
       // <<< FORK
 
@@ -75,6 +84,9 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
   @Override
   public void onNewToken(@NonNull String token) {
     logger.log("Refreshed FCM token: " + token);
+    // >>> FORK KAR-492 — durable public PushTokenChanged event delivery
+    NativeFirebaseMessageHandler.onNewToken(this, token);
+    // <<< FORK
   }
 
   /**

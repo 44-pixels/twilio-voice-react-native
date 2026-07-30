@@ -48,7 +48,16 @@ final class ForkCallInviteSettlement {
         return null;
       }
 
+      if (!ForkSingleCallSession.reserveSetup(callRecord.getUuid())) {
+        logger.warning(
+          "CallInvite owner changed before " + action + " " + callRecord.getUuid());
+        return null;
+      }
+
       callRecord.setCallInviteUsedState();
+      if (action == Action.ACCEPT) {
+        ForkCallInviteRejection.clearReason(callRecord);
+      }
       return callInvite;
     }
   }
@@ -91,6 +100,7 @@ final class ForkCallInviteSettlement {
 
       callRecord.setCancelledCallInvite(cancelledCallInvite);
       callRecord.setCallException(callException);
+      ForkCallInviteRejection.clearReason(callRecord);
       return true;
     }
   }

@@ -312,6 +312,13 @@ public class TwilioVoiceReactNativeModule extends ReactContextBaseJavaModule {
     this.moduleProxy.voice.getDeviceToken(new PromiseAdapter(promise));
   }
 
+  // >>> FORK KAR-492 — atomically consume a cold-start token after listener setup
+  @ReactMethod
+  public void voice_consumePendingPushToken(Promise promise) {
+    this.moduleProxy.voice.consumePendingPushToken(new PromiseAdapter(promise));
+  }
+  // <<< FORK
+
   @ReactMethod
   public void voice_getVersion(Promise promise) {
     this.moduleProxy.voice.getVersion(new PromiseAdapter(promise));

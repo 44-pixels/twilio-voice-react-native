@@ -746,6 +746,17 @@ export class Call extends EventEmitter {
     return this._initialConnectedTimestamp;
   }
 
+  // >>> FORK KAR-877 — expose the stable native call identity
+  /**
+   * Get the UUID used to identify this call across the JavaScript and native
+   * layers.
+   * @returns The stable UUID of this call.
+   */
+  getUuid(): string {
+    return this._uuid;
+  }
+  // <<< FORK
+
   /**
    * Get the call `SID`.
    * @returns

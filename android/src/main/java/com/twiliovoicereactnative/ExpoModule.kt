@@ -293,6 +293,12 @@ class ExpoModule : Module() {
       this@ExpoModule.moduleProxy.voice.getDeviceToken(PromiseAdapter(promise))
     }
 
+    // >>> FORK KAR-492 — atomically consume a cold-start token after listener setup
+    AsyncFunction("voice_consumePendingPushToken") { promise: Promise ->
+      this@ExpoModule.moduleProxy.voice.consumePendingPushToken(PromiseAdapter(promise))
+    }
+    // <<< FORK
+
     AsyncFunction("voice_getVersion") {
       promise: Promise ->
 

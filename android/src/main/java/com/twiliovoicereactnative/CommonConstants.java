@@ -31,6 +31,11 @@ public class CommonConstants {
   public static final String VoiceEventRegistered = "voiceEventRegistered";
   public static final String VoiceEventUnregistered = "voiceEventUnregistered";
 
+  // >>> FORK KAR-492 — Android FCM token-change event
+  public static final String VoiceEventPushTokenChanged = "voiceEventPushTokenChanged";
+  public static final String VoiceEventPushToken = "token";
+  // <<< FORK
+
   // Call Info
   public static final String CallInfoUuid = "uuid";
   public static final String CallInfoSid = "sid";

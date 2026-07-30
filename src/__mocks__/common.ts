@@ -98,6 +98,9 @@ export const NativeModule = {
   voice_getDeviceToken: createMockWithResolvedValue(
     'mock-nativemodule-devicetoken'
   ),
+  // >>> FORK KAR-492 — cold-start token consumption after listener setup
+  voice_consumePendingPushToken: createMockWithResolvedValue(null),
+  // <<< FORK
   voice_getVersion: createMockWithResolvedValue('mock-nativemodule-version'),
   voice_handleEvent: createMockWithResolvedValue(true),
   voice_initializePushRegistry: createMockWithResolvedValue(undefined),
@@ -107,8 +110,8 @@ export const NativeModule = {
   // >>> FORK KAR-787 — see type/CallSound.ts
   voice_setCallSoundSettings: createMockWithResolvedValue(undefined),
   voice_getCallSoundSettings: createMockWithResolvedValue({
-    ringtone: {mode: 'default'},
-    callEnded: {mode: 'enabled'},
+    ringtone: { mode: 'default' },
+    callEnded: { mode: 'enabled' },
   }),
   voice_getAvailableRingtones: createMockWithResolvedValue([]),
   voice_previewCallSound: createMockWithResolvedValue(undefined),

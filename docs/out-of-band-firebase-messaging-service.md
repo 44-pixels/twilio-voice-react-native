@@ -2,6 +2,7 @@ The functionality detailed in this document was added in `1.2.1` of the
 `@twilio/voice-react-native-sdk`.
 
 # Using an out-of-band Firebase Messaging service
+
 The `@twilio/voice-react-native-sdk` includes a built-in Firebase Messaging
 service to allow users to register and listen for incoming calls. However, it
 is common that other libraries will have the same requirement of listening for
@@ -14,20 +15,24 @@ This document provides details on how to disable the SDK's built-in Firebase
 Messaging service, and how to retain the SDK's incoming call functionality.
 
 ## Disabling the built-in Firebase Messaging service
+
 To disable the built-in Firebase Messaging service, you can add a
 `config.xml` file in the `src/main/res/values/` folder within your
 `android/app/` folder.
 Including the following content within this file will disable the built-in
 Firebase Messaging service:
+
 ```
 <bool name="twiliovoicereactnative_firebasemessagingservice_enabled">false</bool>
 ```
+
 See [this file](/android/src/main/res/values/config.xml) for more details.
 
 With the built-in Firebase Messaging service disabled, any other Firebase
 Messaging service will be able to listen for Firebase messages.
 
 ## Native-first Firebase message handling
+
 Firebase messages can now be passed into the Voice SDK from any other source.
 
 For incoming calls, prefer handling Twilio payloads in a native Android
@@ -44,6 +49,13 @@ class AppFirebaseMessagingService : ReactNativeFirebaseMessagingService() {
     if (NativeFirebaseMessageHandler.handle(applicationContext, message)) return
     super.onMessageReceived(message)
   }
+
+  // >>> FORK KAR-492 — forward Android FCM token changes
+  override fun onNewToken(token: String) {
+    NativeFirebaseMessageHandler.onNewToken(applicationContext, token)
+    super.onNewToken(token)
+  }
+  // <<< FORK
 }
 ```
 
@@ -65,7 +77,36 @@ service, and registers a generated native multiplexer service that calls
 `NativeFirebaseMessageHandler` before delegating non-Twilio messages to
 RNFirebase.
 
+<!-- >>> FORK KAR-492 — generated Android FCM token forwarding -->
+
+The generated service also forwards `onNewToken` updates.
+
+<!-- <<< FORK -->
+
+<!-- >>> FORK KAR-492 — Android FCM token-change event -->
+
+## Push token changes
+
+The built-in and generated Firebase services emit token updates through the
+public Voice event API. Custom services must forward `onNewToken` as shown
+above.
+
+```ts
+voice.on(Voice.Event.PushTokenChanged, (token) => {
+  // Re-register the new Android FCM token with your application backend.
+});
+```
+
+If Firebase refreshes the token before React Native starts, the latest token is
+retained natively. It is consumed only after the first `PushTokenChanged`
+listener subscribes, so constructing `Voice` before app services start cannot
+lose the event. Live native notifications remain persisted until JavaScript
+confirms an active subscriber and consumes them.
+
+<!-- <<< FORK -->
+
 ## voice.handleFirebaseMessage API
+
 The JS API remains available for foreground handling or non-critical fallback
 paths:
 
@@ -85,6 +126,7 @@ Firebase messaging service is from the
 [React Native Firebase](https://rnfirebase.io/) team. More specifically, their
 Cloud Messaging library: `@react-native-firebase/messaging`. Their library will
 be used in further examples in this document.
+
 ```ts
 // preferably in your index.js/index.ts file
 // or, as early as possible in your application

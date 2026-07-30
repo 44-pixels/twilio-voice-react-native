@@ -15,7 +15,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.twilio.audioswitch.AudioDevice;
+import com.twilio.voice.AcceptOptions;
+import com.twilio.voice.Call;
 import com.twilio.voice.CallException;
+import com.twilio.voice.CallInvite;
+import com.twilio.voice.ConnectOptions;
 
 import java.util.Map;
 import java.util.UUID;
@@ -24,10 +28,23 @@ import java.util.concurrent.ConcurrentHashMap;
 final class ForkCallLifecycleCoordinator {
   private enum Direction { INCOMING, OUTGOING }
   private enum TelecomState { NOT_REPORTED, REPORTING, ACTIVE, ENDED }
-  private enum TwilioState { INVITE, CONNECTING, RINGING, CONNECTED, FAILED, DISCONNECTED }
+  enum TwilioState {
+    INVITE,
+    CONNECTING,
+    RINGING,
+    CONNECTED,
+    FAILED,
+    DISCONNECTED;
+
+    boolean isTerminal() {
+      return this == FAILED || this == DISCONNECTED;
+    }
+  }
 
   private static final SDKLog logger = new SDKLog(ForkCallLifecycleCoordinator.class);
   private static final ConcurrentHashMap<UUID, CallState> calls = new ConcurrentHashMap<>();
+  private static final ConcurrentHashMap<UUID, Call> outgoingSetupCalls =
+    new ConcurrentHashMap<>();
 
   private ForkCallLifecycleCoordinator() {}
 
@@ -37,7 +54,14 @@ final class ForkCallLifecycleCoordinator {
     if (ForkVoiceMessageGuard.shouldWakeForIncomingCall(context, data)) {
       ForkIncomingCallWakeLock.acquireIfIncomingCall(context, data);
     }
-    return ForkVoiceMessageGuard.handleNativeFcm(context, data);
+    try {
+      boolean handled = ForkVoiceMessageGuard.handleNativeFcm(context, data);
+      if (!handled) ForkIncomingCallWakeLock.releaseForPayload(data);
+      return handled;
+    } catch (RuntimeException error) {
+      ForkIncomingCallWakeLock.releaseForPayload(data);
+      throw error;
+    }
   }
 
   static boolean claimIncoming(@NonNull Context context,
@@ -45,8 +69,8 @@ final class ForkCallLifecycleCoordinator {
     return ForkSingleCallSession.claimIncoming(context, callRecord);
   }
 
-  static boolean claimOutgoing(@NonNull UUID uuid) {
-    return ForkSingleCallSession.claim(uuid);
+  static boolean claimOutgoing(@NonNull Context context, @NonNull UUID uuid) {
+    return ForkSingleCallSession.claimOutgoing(context, uuid);
   }
 
   static void outgoingInvite(@NonNull Context context,
@@ -58,8 +82,40 @@ final class ForkCallLifecycleCoordinator {
     ForkTelecomManager.reportOutgoingCall(context, callRecord);
   }
 
-  static void outgoingConnectFailed(@NonNull UUID uuid) {
-    ForkSingleCallSession.release(uuid);
+  @NonNull
+  static Call connectOutgoing(@NonNull UUID uuid,
+                              @NonNull ConnectOptions connectOptions,
+                              @NonNull Call.Listener listener) {
+    Call call = VoiceApplicationProxy.getVoiceServiceApi().connect(connectOptions, listener);
+    outgoingSetupCalls.put(uuid, call);
+    return call;
+  }
+
+  static void outgoingSetupFailed(@NonNull UUID uuid) {
+    CallRecordDatabase.CallRecord callRecord = VoiceApplicationProxy
+      .getCallRecordDatabase()
+      .get(new CallRecordDatabase.CallRecord(uuid));
+    Call call = callRecord == null ? outgoingSetupCalls.get(uuid) : callRecord.getVoiceCall();
+    outgoingSetupFailed(uuid, call);
+  }
+
+  static void outgoingSetupFailed(@NonNull UUID uuid, @Nullable Call call) {
+    outgoingSetupCalls.remove(uuid);
+    ForkSingleCallSession.completeSetup(uuid);
+    if (call == null
+      || isTerminalTwilioState(uuid)
+      || call.getState() == Call.State.DISCONNECTED) {
+      CallRecordDatabase.CallRecord callRecord = VoiceApplicationProxy
+        .getCallRecordDatabase()
+        .get(new CallRecordDatabase.CallRecord(uuid));
+      if (callRecord != null) {
+        VoiceApplicationProxy.getCallRecordDatabase().remove(callRecord);
+      }
+      ForkSingleCallSession.releaseIfOwner(uuid);
+      return;
+    }
+
+    call.disconnect();
   }
 
   static int authorizeAnswer(@NonNull CallRecordDatabase.CallRecord callRecord) {
@@ -84,7 +140,16 @@ final class ForkCallLifecycleCoordinator {
     if (!ForkTelecomManager.isTelecomAudioOwner(uuid)) {
       VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
     }
-    ForkSingleCallSession.release(uuid);
+    ForkSingleCallSession.releaseIfOwner(uuid);
+  }
+
+  static void outgoingRingingForeground(
+    @NonNull CallRecordDatabase.CallRecord callRecord,
+    @NonNull Call call
+  ) {
+    if (!VoiceApplicationProxy.getVoiceServiceApi().raiseOutgoingCallNotification(callRecord)) {
+      outgoingSetupFailed(callRecord.getUuid(), call);
+    }
   }
 
   static void outgoingConnecting(@NonNull CallRecordDatabase.CallRecord callRecord) {
@@ -92,6 +157,8 @@ final class ForkCallLifecycleCoordinator {
     state.twilioState = TwilioState.CONNECTING;
     state.callSid = callSidFor(callRecord);
     logger.debug("outgoingConnecting: " + state.identityLog());
+    outgoingSetupCalls.remove(callRecord.getUuid());
+    ForkSingleCallSession.completeSetup(callRecord.getUuid());
   }
 
   static void incomingInvite(@NonNull Context context,
@@ -104,16 +171,39 @@ final class ForkCallLifecycleCoordinator {
     if (!ForkTelecomManager.isAvailable(context)) {
       state.telecomState = TelecomState.NOT_REPORTED;
       ForkTelecomManager.reportIncomingCall(context, callRecord);
+      ForkSingleCallSession.completeSetup(callRecord.getUuid());
       return;
     }
 
     state.telecomState = TelecomState.REPORTING;
     ForkTelecomManager.reportIncomingCall(context, callRecord);
+    ForkSingleCallSession.completeSetup(callRecord.getUuid());
   }
 
-  static void cancelledInvite(@Nullable String callSid) {
+  static boolean acceptIncoming(@NonNull Context context,
+                                @NonNull CallRecordDatabase.CallRecord callRecord,
+                                @NonNull CallInvite callInvite,
+                                @NonNull AcceptOptions acceptOptions) {
+    try {
+      ForkTwilioVoiceThread.runBlocking(() -> callRecord.setCall(
+        callInvite.accept(
+          context,
+          acceptOptions,
+          new CallListenerProxy(callRecord.getUuid(), context))));
+    } catch (RuntimeException error) {
+      logger.warning(error, "event=call_accept result=synchronous_failure uuid="
+        + callRecord.getUuid() + " sid=" + callRecord.getCallSid());
+      cleanupSynchronousAcceptFailure(context, callRecord, error);
+      return false;
+    }
+    ForkSingleCallSession.completeSetup(callRecord.getUuid());
+    return true;
+  }
+
+  static void cancelledInvite(@NonNull CallRecordDatabase.CallRecord callRecord) {
+    String callSid = callRecord.getCallSid();
     logger.debug("cancelledInvite: " + callSid);
-    ForkIncomingCallWakeLock.release();
+    ForkIncomingCallWakeLock.release(callRecord.getUuid());
     ForkIncomingCallActivity.finishForCallSid(callSid);
     if (hasAcceptedCallForSid(callSid)) {
       logger.debug("cancelledInvite: ignored for already accepted call " + callSid);
@@ -129,7 +219,7 @@ final class ForkCallLifecycleCoordinator {
     state.callSid = callSidFor(callRecord);
     logger.debug("answerRequested: " + state.identityLog());
 
-    ForkIncomingCallWakeLock.release();
+    ForkIncomingCallWakeLock.release(callRecord.getUuid());
     ForkIncomingCallActivity.finishFor(callRecord);
     if (state.isTelecomMirrored()) {
       ForkTelecomManager.markAnswered(callRecord);
@@ -142,14 +232,16 @@ final class ForkCallLifecycleCoordinator {
     state.callSid = callSidFor(callRecord);
     logger.debug("rejectRequested: " + state.identityLog());
 
-    ForkIncomingCallWakeLock.release();
+    ForkIncomingCallWakeLock.release(callRecord.getUuid());
     ForkIncomingCallActivity.finishFor(callRecord);
-    boolean telecomManaged = ForkTelecomManager.isTelecomAudioOwner(callRecord);
     if (state.isTelecomMirrored()) {
       ForkTelecomManager.markRejected(callRecord);
     }
     finishCall(state);
-    if (!telecomManaged) ForkSingleCallSession.release(callRecord.getUuid());
+    ForkSingleCallSession.completeSetup(callRecord.getUuid());
+    if (!ForkTelecomManager.isTelecomAudioOwner(callRecord)) {
+      ForkSingleCallSession.releaseIfOwner(callRecord.getUuid());
+    }
   }
 
   static void cancelledBySystem(@NonNull CallRecordDatabase.CallRecord callRecord) {
@@ -158,7 +250,7 @@ final class ForkCallLifecycleCoordinator {
     state.callSid = callSidFor(callRecord);
     logger.debug("cancelledBySystem: " + state.identityLog());
 
-    ForkIncomingCallWakeLock.release();
+    ForkIncomingCallWakeLock.release(callRecord.getUuid());
     ForkIncomingCallActivity.finishFor(callRecord);
     if (hasAcceptedCallForSid(callRecord.getCallSid())) {
       logger.debug("cancelledBySystem: ignored for already accepted call " + callRecord.getCallSid());
@@ -169,7 +261,7 @@ final class ForkCallLifecycleCoordinator {
       ForkTelecomManager.cancelIncomingCall(callRecord.getCallSid());
     }
     finishCall(state);
-    if (!telecomManaged) ForkSingleCallSession.release(callRecord.getUuid());
+    if (!telecomManaged) ForkSingleCallSession.releaseIfOwner(callRecord.getUuid());
   }
 
   static void twilioRinging(@NonNull CallRecordDatabase.CallRecord callRecord) {
@@ -212,7 +304,7 @@ final class ForkCallLifecycleCoordinator {
     state.callSid = callSidFor(callRecord);
     logger.debug("twilioDisconnected: " + state.identityLog());
 
-    ForkIncomingCallWakeLock.release();
+    ForkIncomingCallWakeLock.release(callRecord.getUuid());
     ForkIncomingCallActivity.finishFor(callRecord);
     deactivateFallbackAudio(callRecord);
     boolean telecomManaged = ForkTelecomManager.isTelecomAudioOwner(callRecord);
@@ -222,7 +314,89 @@ final class ForkCallLifecycleCoordinator {
       logger.debug("twilioDisconnected: no Telecom call to disconnect " + state.identityLog());
     }
     finishCall(state);
-    if (!telecomManaged) ForkSingleCallSession.release(callRecord.getUuid());
+    if (!telecomManaged) ForkSingleCallSession.releaseIfOwner(callRecord.getUuid());
+  }
+
+  private static void cleanupSynchronousAcceptFailure(
+    @NonNull Context context,
+    @NonNull CallRecordDatabase.CallRecord callRecord,
+    @NonNull RuntimeException error
+  ) {
+    UUID uuid = callRecord.getUuid();
+    String callSid = callRecord.getCallSid();
+    boolean telecomManaged = ForkTelecomManager.isTelecomAudioOwner(callRecord);
+    String promiseMessage = error.getMessage() == null
+      ? "Unable to accept incoming call."
+      : error.getMessage();
+
+    cleanupAcceptFailure("reject promise",
+      () -> callRecord.failCallAcceptedPromise(promiseMessage));
+    cleanupAcceptFailure("remove CallRecord",
+      () -> VoiceApplicationProxy.getCallRecordDatabase().remove(callRecord));
+    cleanupAcceptFailure("remove foreground notification",
+      VoiceService::removeForegroundNotificationIfRunning);
+    cleanupAcceptFailure("stop ringer",
+      () -> VoiceApplicationProxy.getMediaPlayerManager().stop());
+    cleanupAcceptFailure("deactivate fallback audio",
+      () -> deactivateFallbackAudio(callRecord));
+    cleanupAcceptFailure("release wake lock",
+      () -> ForkIncomingCallWakeLock.release(uuid));
+    cleanupAcceptFailure("finish incoming activity",
+      () -> ForkIncomingCallActivity.finishFor(callRecord));
+    cleanupAcceptFailure("clear invite payload",
+      () -> ForkInvitePayloadStore.clear(callSid));
+    cleanupAcceptFailure("cancel notification",
+      () -> ForkNotificationIdentity.cancelForCallSid(context, callSid));
+    cleanupAcceptFailure("settle voice message",
+      () -> ForkVoiceMessageGuard.markSettled(callSid));
+    cleanupAcceptFailure("clear lock-screen flags", ForkLockScreenFlags::clearForEndedCall);
+    calls.remove(uuid);
+
+    if (telecomManaged) {
+      cleanupAcceptFailure("disconnect Telecom call",
+        () -> ForkTelecomManager.markDisconnected(callRecord, null));
+    }
+    cleanupAcceptFailure("complete setup reservation",
+      () -> ForkSingleCallSession.completeSetup(uuid));
+    cleanupAcceptFailure("release session owner", () -> {
+      if (!ForkTelecomManager.isTelecomAudioOwner(callRecord)) {
+        ForkSingleCallSession.releaseIfOwner(uuid);
+      }
+    });
+  }
+
+  private static void cleanupAcceptFailure(@NonNull String operation,
+                                           @NonNull Runnable cleanup) {
+    try {
+      cleanup.run();
+    } catch (RuntimeException cleanupError) {
+      logger.warning(cleanupError,
+        "event=call_accept_cleanup result=failure operation=" + operation);
+    }
+  }
+
+  static void retireStaleOwner(
+    @NonNull Context context,
+    @NonNull UUID uuid,
+    @Nullable CallRecordDatabase.CallRecord callRecord,
+    @Nullable ForkCallRecordSnapshot snapshot
+  ) {
+    calls.remove(uuid);
+    ForkIncomingCallWakeLock.release(uuid);
+    outgoingSetupCalls.remove(uuid);
+    if (callRecord != null) {
+      VoiceApplicationProxy.getCallRecordDatabase().remove(callRecord);
+      ForkIncomingCallActivity.finishFor(callRecord);
+    }
+    VoiceService.removeForegroundNotificationIfRunning();
+    VoiceApplicationProxy.getMediaPlayerManager().stop();
+    VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
+
+    String callSid = snapshot == null ? null : snapshot.callSid;
+    ForkInvitePayloadStore.clear(callSid);
+    ForkNotificationIdentity.cancelForCallSid(context, callSid);
+    ForkVoiceMessageGuard.markSettled(callSid);
+    ForkLockScreenFlags.clearForEndedCall();
   }
 
   static boolean selectAudioDevice(@NonNull AudioDevice audioDevice,
@@ -265,9 +439,21 @@ final class ForkCallLifecycleCoordinator {
 
   private static void finishCall(@NonNull CallState state) {
     state.telecomState = TelecomState.ENDED;
-    if (state.uuid != null) {
-      calls.remove(state.uuid);
-    }
+  }
+
+  @Nullable
+  static TwilioState twilioState(@NonNull UUID uuid) {
+    CallState state = calls.get(uuid);
+    return state == null ? null : state.twilioState;
+  }
+
+  static void ownerReleased(@NonNull UUID uuid) {
+    calls.remove(uuid);
+  }
+
+  private static boolean isTerminalTwilioState(@NonNull UUID uuid) {
+    TwilioState state = twilioState(uuid);
+    return state != null && state.isTerminal();
   }
 
   private static void markEndedForSid(@Nullable String callSid) {
@@ -278,7 +464,9 @@ final class ForkCallLifecycleCoordinator {
       boolean telecomManaged = state.uuid != null
         && ForkTelecomManager.isTelecomAudioOwner(state.uuid);
       finishCall(state);
-      if (state.uuid != null && !telecomManaged) ForkSingleCallSession.release(state.uuid);
+      if (state.uuid != null && !telecomManaged) {
+        ForkSingleCallSession.releaseIfOwner(state.uuid);
+      }
       return;
     }
   }
@@ -296,10 +484,10 @@ final class ForkCallLifecycleCoordinator {
 
   private static final class CallState {
     @Nullable final UUID uuid;
-    Direction direction;
-    @Nullable String callSid;
-    TelecomState telecomState;
-    TwilioState twilioState;
+    volatile Direction direction;
+    @Nullable volatile String callSid;
+    volatile TelecomState telecomState;
+    volatile TwilioState twilioState;
 
     CallState(@Nullable UUID uuid,
               @NonNull Direction direction,

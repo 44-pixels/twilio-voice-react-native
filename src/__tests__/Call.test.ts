@@ -428,6 +428,15 @@ describe('Call class', () => {
       });
     });
 
+    // >>> FORK KAR-877 — stable native call identity
+    describe('.getUuid', () => {
+      it('returns the UUID value', () => {
+        const uuid = new Call(createNativeCallInfo()).getUuid();
+        expect(uuid).toBe('mock-nativecallinfo-uuid');
+      });
+    });
+    // <<< FORK
+
     describe('.getSid', () => {
       it('returns the sid value', () => {
         const sid = new Call(createNativeCallInfo()).getSid();

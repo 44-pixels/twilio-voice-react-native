@@ -19,6 +19,13 @@ export interface NativeUnregisteredEvent {
   type: Constants.VoiceEventUnregistered;
 }
 
+// >>> FORK KAR-492 — Android FCM token-change event
+export interface NativePushTokenChangedEvent {
+  type: Constants.VoiceEventPushTokenChanged;
+  token: string;
+}
+// <<< FORK
+
 export interface NativeCallInviteIncomingEvent {
   [Constants.VoiceEventType]: Constants.VoiceEventTypeValueIncomingCallInvite;
   callInvite: NativeCallInviteInfo;
@@ -32,7 +39,10 @@ export type NativeVoiceEvent =
   | NativeCallInviteIncomingEvent
   | NativeErrorEvent
   | NativeRegisteredEvent
-  | NativeUnregisteredEvent;
+  | NativeUnregisteredEvent
+  // >>> FORK KAR-492 — Android FCM token-change event
+  | NativePushTokenChangedEvent;
+// <<< FORK
 
 export type NativeVoiceEventType =
   | Constants.VoiceEventAudioDevicesUpdated
@@ -42,4 +52,7 @@ export type NativeVoiceEventType =
   | Constants.VoiceEventTypeValueIncomingCallInvite
   | Constants.VoiceEventError
   | Constants.VoiceEventRegistered
-  | Constants.VoiceEventUnregistered;
+  | Constants.VoiceEventUnregistered
+  // >>> FORK KAR-492 — Android FCM token-change event
+  | Constants.VoiceEventPushTokenChanged;
+// <<< FORK

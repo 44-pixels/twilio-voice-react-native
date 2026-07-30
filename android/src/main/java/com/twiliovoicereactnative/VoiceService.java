@@ -218,6 +218,9 @@ public class VoiceService extends Service {
       // report an error to logger
       logger.warning("WARNING: Incoming call cannot be handled, microphone permission not granted");
       // >>> FORK KAR-443 — permission failure is terminal for the reserved invite
+      ForkCallInviteRejection.markReason(
+        callRecord,
+        ForkCallInviteRejection.Reason.MICROPHONE_PERMISSION_MISSING);
       rejectCall(callRecord);
       // <<< FORK
       return;
@@ -276,6 +279,11 @@ public class VoiceService extends Service {
 
       // report an error to logger
       logger.warning("WARNING: Call not accepted, microphone permission not granted");
+      // >>> FORK KAR-443 — classify native invite rejection
+      ForkCallInviteRejection.markReason(
+        callRecord,
+        ForkCallInviteRejection.Reason.MICROPHONE_PERMISSION_MISSING);
+      // <<< FORK
       rejectCall(callRecord);
       return;
     }
@@ -291,6 +299,9 @@ public class VoiceService extends Service {
     // >>> FORK KAR-443 — foreground failure must precede and prevent Twilio acceptance
     if (!createOrReplaceForegroundNotification(callRecord.getNotificationId(), notification)) {
       callRecord.failCallAcceptedPromise("Unable to start active call foreground service.");
+      ForkCallInviteRejection.markReason(
+        callRecord,
+        ForkCallInviteRejection.Reason.FOREGROUND_SERVICE_FAILED);
       rejectCall(callRecord);
       return;
     }
@@ -326,12 +337,13 @@ public class VoiceService extends Service {
       .callMessageListener(new CallMessageListenerProxy())
       .build();
 
-    // >>> FORK KAR-809 — use the invite captured by the atomic settlement claim
-    ForkTwilioVoiceThread.runBlocking(() -> callRecord.setCall(
-      callInvite.accept(
-        VoiceService.this,
-        acceptOptions,
-        new CallListenerProxy(callRecord.getUuid(), VoiceService.this))));
+    // >>> FORK KAR-443, KAR-809 — use the atomically claimed invite and setup reservation
+    boolean accepted = ForkCallLifecycleCoordinator.acceptIncoming(
+      VoiceService.this,
+      callRecord,
+      callInvite,
+      acceptOptions);
+    if (!accepted) return;
     // CallInvite state was transitioned by ForkCallInviteSettlement.claim().
     // <<< FORK
 
@@ -382,48 +394,9 @@ public class VoiceService extends Service {
       callRecord, ForkCallInviteSettlement.Action.REJECT);
     // <<< FORK
 
-    // remove call record
-    getCallRecordDatabase().remove(callRecord);
-
-    // take down notification
-    removeForegroundNotification();
-    removeNotification(callRecord.getNotificationId());
-
-    // stop ringer sound
-    VoiceApplicationProxy.getMediaPlayerManager().stop();
-    // >>> FORK KAR-443 — AudioSwitch is fallback-only
-    ForkCallLifecycleCoordinator.deactivateFallbackAudio(callRecord);
+    // >>> FORK KAR-443, KAR-809 — reject and clean while retaining ownership
+    ForkCallInviteRejection.rejectClaimed(VoiceService.this, callInvite, callRecord);
     // <<< FORK
-
-    // reject call
-    // >>> FORK KAR-809 — use the invite captured by the atomic settlement claim
-    ForkTwilioVoiceThread.runBlocking(() -> callInvite.reject(VoiceService.this));
-    // CallInvite state was transitioned by ForkCallInviteSettlement.claim().
-    // <<< FORK
-    // >>> FORK KAR-443 — release ownership only after Twilio settles
-    ForkCallLifecycleCoordinator.rejectRequested(callRecord);
-    // <<< FORK
-    // >>> FORK KAR-492 — see ForkInvitePayloadStore.java / ForkVoiceMessageGuard.java
-    ForkInvitePayloadStore.clear(callRecord.getCallSid());
-    ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());
-    // <<< FORK
-
-    // >>> FORK KAR-448 — see ForkLockScreenFlags.java
-    ForkLockScreenFlags.clearForEndedCall();
-    // <<< FORK
-
-    // handle if event spawned from JS
-    if (null != callRecord.getCallRejectedPromise()) {
-      callRecord.getCallRejectedPromise().resolve(callRecord.getUuid().toString());
-    }
-
-    // notify JS layer
-    sendJSEvent(
-      ScopeCallInvite,
-      constructJSMap(
-        new Pair<>(CallInviteEventKeyType, CallInviteEventTypeValueRejected),
-        new Pair<>(CallInviteEventKeyCallSid, callRecord.getCallSid()),
-        new Pair<>(JS_EVENT_KEY_CALL_INVITE_INFO, serializeCallInvite(callRecord))));
   }
   private void cancelCall(final CallRecordDatabase.CallRecord callRecord) {
     if (null == callRecord) { logger.warning("cancelCall: no call record (KAR-316)"); return; } // FORK KAR-316
@@ -470,12 +443,6 @@ public class VoiceService extends Service {
         VoiceService.this,
         callRecord);
     if (!createOrReplaceForegroundNotification(callRecord.getNotificationId(), notification)) {
-      // >>> FORK KAR-876 — guard against native segfault on an ended call (Sentry KAREN-APP-E4)
-      final Call voiceCall = callRecord.getVoiceCall();
-      if (voiceCall != null && voiceCall.getState() != Call.State.DISCONNECTED) {
-        voiceCall.disconnect();
-      }
-      // <<< FORK
       return false;
     }
     return true;

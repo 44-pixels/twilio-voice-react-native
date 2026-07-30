@@ -218,6 +218,7 @@ export class Call extends EventEmitter {
     getState(): Call.State;
     getStats(): Promise<RTCStats.StatsReport>;
     getTo(): string | undefined;
+    getUuid(): string;
     hold(hold: boolean): Promise<boolean>;
     isMuted(): boolean | undefined;
     isOnHold(): boolean | undefined;
@@ -281,6 +282,12 @@ export namespace Call {
         'Reconnecting' = "reconnecting",
         'Ringing' = "ringing"
     }
+}
+
+// @public
+export interface CallbackRequest {
+    handle: string;
+    requestId: string;
 }
 
 // @public
@@ -374,6 +381,32 @@ export interface CallMessage {
     content: any;
     contentType?: string;
     messageType: string;
+}
+
+// @public
+export namespace CallSound {
+    const SystemRingtoneId = "os-ringtone";
+    export type AvailableSound = {
+        id: string;
+        displayName: string;
+        isDefault: boolean;
+    };
+    export type Bundled = {
+        mode: 'bundled';
+        soundId: string;
+    };
+    export type CallEndedSetting = {
+        mode: 'enabled';
+    } | {
+        mode: 'disabled';
+    };
+    export type RingtoneSetting = {
+        mode: 'default';
+    } | Bundled;
+    export type Settings = {
+        ringtone: RingtoneSetting;
+        callEnded: CallEndedSetting;
+    };
 }
 
 // @public
@@ -1179,14 +1212,18 @@ namespace UserMediaErrors {
 export interface Voice {
     addListener(audioDevicesUpdatedEvent: Voice.Event.AudioDevicesUpdated, listener: Voice.Listener.AudioDevicesUpdated): this;
     addListener(callInviteEvent: Voice.Event.CallInvite, listener: Voice.Listener.CallInvite): this;
+    addListener(callbackRequestedEvent: Voice.Event.CallbackRequested, listener: Voice.Listener.CallbackRequested): this;
     addListener(errorEvent: Voice.Event.Error, listener: Voice.Listener.Error): this;
     addListener(registeredEvent: Voice.Event.Registered, listener: Voice.Listener.Registered): this;
     addListener(unregisteredEvent: Voice.Event.Unregistered, listener: Voice.Listener.Unregistered): this;
+    addListener(pushTokenChangedEvent: Voice.Event.PushTokenChanged, listener: Voice.Listener.PushTokenChanged): this;
     addListener(voiceEvent: Voice.Event, listener: Voice.Listener.Generic): this;
     // @internal (undocumented)
     emit(voiceEvent: Voice.Event.AudioDevicesUpdated, audioDevices: AudioDevice[], selectedDevice?: AudioDevice): boolean;
     // @internal (undocumented)
     emit(voiceEvent: Voice.Event.CallInvite, callInvite: CallInvite): boolean;
+    // @internal (undocumented)
+    emit(voiceEvent: Voice.Event.CallbackRequested, request: Voice.CallbackRequest): boolean;
     // @internal (undocumented)
     emit(voiceEvent: Voice.Event.Error, error: TwilioError): boolean;
     // @internal (undocumented)
@@ -1194,39 +1231,51 @@ export interface Voice {
     // @internal (undocumented)
     emit(voiceEvent: Voice.Event.Unregistered): boolean;
     // @internal (undocumented)
+    emit(voiceEvent: Voice.Event.PushTokenChanged, token: string): boolean;
+    // @internal (undocumented)
     emit(voiceEvent: Voice.Event, ...args: any[]): boolean;
     on(audioDevicesUpdatedEvent: Voice.Event.AudioDevicesUpdated, listener: Voice.Listener.AudioDevicesUpdated): this;
     on(callInviteEvent: Voice.Event.CallInvite, listener: Voice.Listener.CallInvite): this;
+    on(callbackRequestedEvent: Voice.Event.CallbackRequested, listener: Voice.Listener.CallbackRequested): this;
     on(errorEvent: Voice.Event.Error, listener: Voice.Listener.Error): this;
     on(registeredEvent: Voice.Event.Registered, listener: Voice.Listener.Registered): this;
     on(unregisteredEvent: Voice.Event.Unregistered, listener: Voice.Listener.Unregistered): this;
+    on(pushTokenChangedEvent: Voice.Event.PushTokenChanged, listener: Voice.Listener.PushTokenChanged): this;
     on(voiceEvent: Voice.Event, listener: Voice.Listener.Generic): this;
 }
 
 // @public
 export class Voice extends EventEmitter {
     constructor();
+    completeCallbackRequest(requestId: string): Promise<void>;
     connect(token: string, { contactHandle, notificationDisplayName, params, }?: Voice.ConnectOptions): Promise<Call>;
     getAudioDevices(): Promise<{
         audioDevices: AudioDevice[];
         selectedDevice?: AudioDevice;
     }>;
+    getAvailableRingtones(): Promise<CallSound.AvailableSound[]>;
     getCallInvites(): Promise<ReadonlyMap<Uuid, CallInvite>>;
     getCalls(): Promise<ReadonlyMap<Uuid, Call>>;
+    getCallSoundSettings(): Promise<CallSound.Settings>;
     getDeviceToken(): Promise<string>;
+    getInitialCallbackRequest(): Promise<Voice.CallbackRequest | null>;
     getVersion(): Promise<string>;
     handleFirebaseMessage(remoteMessage: Record<string, string>): Promise<boolean>;
     initializePushRegistry(): Promise<void>;
+    previewCallSound(soundId: string): Promise<void>;
     register(token: string): Promise<void>;
     runPreflight(accessToken: string, options?: PreflightTest.Options): Promise<PreflightTest>;
     setCallKitConfiguration(configuration: CallKit.ConfigurationOptions): Promise<void>;
+    setCallSoundSettings(settings: CallSound.Settings): Promise<void>;
     setIncomingCallContactHandleTemplate(template?: string): Promise<void>;
     showAvRoutePickerView(): Promise<void>;
+    stopCallSoundPreview(): Promise<void>;
     unregister(token: string): Promise<void>;
 }
 
 // @public
 export namespace Voice {
+    export type CallbackRequest = CallbackRequest;
     export type ConnectOptions = {
         params?: Record<string, string>;
         contactHandle?: string;
@@ -1234,16 +1283,20 @@ export namespace Voice {
     };
     export enum Event {
         'AudioDevicesUpdated' = "audioDevicesUpdated",
+        'CallbackRequested' = "callbackRequested",
         'CallInvite' = "callInvite",
         'Error' = "error",
+        'PushTokenChanged' = "pushTokenChanged",
         'Registered' = "registered",
         'Unregistered' = "unregistered"
     }
     export namespace Listener {
         export type AudioDevicesUpdated = (audioDevices: AudioDevice[], selectedDevice?: AudioDevice) => void;
+        export type CallbackRequested = (request: CallbackRequest) => void;
         export type CallInvite = (callInvite: CallInvite) => void;
         export type Error = (error: TwilioError) => void;
         export type Generic = (...args: any[]) => void;
+        export type PushTokenChanged = (token: string) => void;
         export type Registered = () => void;
         export type Unregistered = () => void;
     }

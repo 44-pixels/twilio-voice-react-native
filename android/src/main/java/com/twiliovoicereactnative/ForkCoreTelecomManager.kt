@@ -91,6 +91,17 @@ internal object ForkCoreTelecomManager {
     }
 
   @JvmStatic
+  fun stateForLog(uuid: UUID?): String = synchronized(stateLock) {
+    when {
+      uuid == null -> "NONE"
+      registeringUuid == uuid -> "REGISTERING"
+      managedRecord?.uuid == uuid && control == null -> "MANAGED_PENDING"
+      managedRecord?.uuid == uuid -> "MANAGED_ACTIVE"
+      else -> "NONE"
+    }
+  }
+
+  @JvmStatic
   fun authorizeAnswer(callRecord: CallRecordDatabase.CallRecord): Int {
     val callControl: CallControlScope
     synchronized(stateLock) {
@@ -258,7 +269,7 @@ internal object ForkCoreTelecomManager {
             }
           },
           onDisconnect = {
-            val waitsForCallEndedSound = callRecord.voiceCall != null
+            val waitsForCallEndedSound = ForkCallRecordSnapshot.capture(callRecord).hasCall
             val callEnded = if (waitsForCallEndedSound) CompletableDeferred<Unit>() else null
             synchronized(stateLock) {
               telecomDisconnectUuid = callRecord.uuid
@@ -336,10 +347,10 @@ internal object ForkCoreTelecomManager {
           val matches = ownsTelecomState(callRecord.uuid)
           val resumeAnswer = matches && pendingAppAnswer && isAnswerable(callRecord)
           val liveIncoming = matches && isAnswerable(callRecord)
+          val recordSnapshot = ForkCallRecordSnapshot.capture(callRecord)
           val liveOutgoing = matches &&
             callDirection == CallRecordDatabase.CallRecord.Direction.OUTGOING &&
-            callRecord.voiceCall != null &&
-            callRecord.voiceCall?.state != com.twilio.voice.Call.State.DISCONNECTED
+            recordSnapshot.liveCall
           clearTelecomState(callRecord.uuid)
           Pair(resumeAnswer, liveIncoming || liveOutgoing)
         }
@@ -348,12 +359,12 @@ internal object ForkCoreTelecomManager {
           ForkTwilioVoiceThread.runBlocking {
             VoiceApplicationProxy.getVoiceServiceApi().acceptCall(callRecord)
           }
-        } else if (fallbackState.second && callRecord.voiceCall != null) {
+        } else if (fallbackState.second && ForkCallRecordSnapshot.capture(callRecord).hasCall) {
           VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().activate()
         }
       } finally {
         synchronized(stateLock) { clearTelecomState(callRecord.uuid) }
-        if (!preserveFallbackOwner) ForkSingleCallSession.release(callRecord.uuid)
+        if (!preserveFallbackOwner) releaseOwnerIfSettled(callRecord)
       }
     }
     synchronized(stateLock) {
@@ -444,6 +455,10 @@ internal object ForkCoreTelecomManager {
       }
       if (shouldReject) {
         callRecord.failCallAcceptedPromise(message)
+        ForkCallInviteRejection.markReason(
+          callRecord,
+          ForkCallInviteRejection.Reason.TELECOM_ANSWER_FAILED,
+        )
         VoiceApplicationProxy.getVoiceServiceApi().rejectCall(callRecord)
       }
     }
@@ -487,7 +502,7 @@ internal object ForkCoreTelecomManager {
       when (val result = callControl.disconnect(DisconnectCause(cause))) {
         is CallControlResult.Success -> {
           synchronized(stateLock) { clearTelecomState(callRecord.uuid) }
-          ForkSingleCallSession.release(callRecord.uuid)
+          releaseOwnerIfSettled(callRecord)
         }
         is CallControlResult.Error -> {
           logger.warning("Core Telecom disconnect failed: ${result.errorCode}")
@@ -516,11 +531,23 @@ internal object ForkCoreTelecomManager {
     else -> null
   }
 
-  private fun isAnswerable(callRecord: CallRecordDatabase.CallRecord): Boolean =
-    ForkSingleCallSession.isOwner(callRecord.uuid) &&
-      callRecord.callInvite != null &&
-      callRecord.callInviteState == CallRecordDatabase.CallRecord.CallInviteState.ACTIVE &&
-      callRecord.voiceCall == null
+  private fun hasLiveTwilioState(
+    callRecord: CallRecordDatabase.CallRecord,
+  ): Boolean = ForkCallRecordSnapshot.capture(callRecord).hasLiveTwilioState()
+
+  private fun releaseOwnerIfSettled(callRecord: CallRecordDatabase.CallRecord) {
+    if (ForkSingleCallSession.hasSetupReservation(callRecord.uuid)) return
+    if (!hasLiveTwilioState(callRecord)) {
+      ForkSingleCallSession.releaseIfOwner(callRecord.uuid)
+    }
+  }
+
+  private fun isAnswerable(callRecord: CallRecordDatabase.CallRecord): Boolean {
+    val snapshot = ForkCallRecordSnapshot.capture(callRecord)
+    return ForkSingleCallSession.isOwner(snapshot.uuid) &&
+      snapshot.activeInvite &&
+      !snapshot.hasCall
+  }
 
   private fun ownsTelecomState(uuid: UUID): Boolean =
     registeringUuid == uuid || managedRecord?.uuid == uuid
