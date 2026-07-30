@@ -30,6 +30,9 @@ class JSEventEmitter {
         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
         .emit(eventName, params);
     } else {
+      // >>> FORK KAR-878 — see ForkSentryReporter.java
+      ForkSentryReporter.addBreadcrumb("voice.js_event.dropped");
+      // <<< FORK
       logger.warning(
         String.format(
           "attempt to sendEvent without context {%s} or Catalyst instance not active",

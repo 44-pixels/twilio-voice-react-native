@@ -9,6 +9,9 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
+// >>> FORK KAR-878 — see ForkSentryReporter.h
+#import "ForkSentryReporter.h"
+// <<< FORK
 
 @interface TwilioVoiceReactNative (PreflightTest) <TVOPreflightDelegate>
 
@@ -310,6 +313,9 @@ RCT_EXPORT_METHOD(preflightTest_flushEvents:(RCTPromiseResolveBlock)resolver
 }
 
 - (void)preflight:(nonnull TVOPreflightTest *)preflightTest didFailWithError:(nonnull NSError *)error {
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_reportWarning:@"voice.preflight.failed" cause:error];
+    // <<< FORK
     [self sendPreflightEvent:@{
         kTwilioVoiceReactNativePreflightTestEventKeyUuid: self.preflightTestUuid,
         kTwilioVoiceReactNativePreflightTestEventKeyType: kTwilioVoiceReactNativePreflightTestEventTypeValueFailed,
@@ -328,6 +334,9 @@ RCT_EXPORT_METHOD(preflightTest_flushEvents:(RCTPromiseResolveBlock)resolver
 }
 
 - (void)preflight:(TVOPreflightTest *)preflightTest didReceiveQualityWarnings:(NSSet<NSNumber *> *)currentWarnings previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_addBreadcrumb:@"voice.preflight.quality_warnings_changed"];
+    // <<< FORK
     NSMutableArray *currentWarningsArr = [self callQualityWarningsArrayFromSet:currentWarnings];
     NSMutableArray *previousWarningsArr = [self callQualityWarningsArrayFromSet:previousWarnings];
     

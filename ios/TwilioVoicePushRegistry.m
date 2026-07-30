@@ -13,6 +13,9 @@
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
 #import "ForkVoipPushReporter.h"
+// >>> FORK KAR-878 — see ForkSentryReporter.h
+#import "ForkSentryReporter.h"
+// <<< FORK
 
 NSString * const kTwilioVoicePushRegistryNotification = @"TwilioVoicePushRegistryNotification";
 NSString * const kTwilioVoicePushRegistryEventType = @"type";
@@ -56,6 +59,9 @@ didReceiveIncomingPushWithPayload:(PKPushPayload *)payload
              forType:(PKPushType)type
 withCompletionHandler:(void (^)(void))completion {
     if ([type isEqualToString:PKPushTypeVoIP]) {
+        // >>> FORK KAR-878 — see ForkSentryReporter.h
+        [ForkSentryReporter fork_addBreadcrumb:@"voice.pushkit.incoming_push_received"];
+        // <<< FORK
         // >>> FORK KAR-869 — report to CallKit synchronously
         // so iOS doesn't kill the app for an unhandled VoIP push on cold start.
         [[ForkVoipPushReporter sharedReporter] reportIncomingCallForPushPayload:payload.dictionaryPayload];
@@ -72,6 +78,9 @@ withCompletionHandler:(void (^)(void))completion {
 
 - (void)pushRegistry:(PKPushRegistry *)registry
         didInvalidatePushTokenForType:(NSString *)type {
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_reportWarning:@"voice.pushkit.token_invalidated" cause:nil];
+    // <<< FORK
     // TODO: notify view-controller to emit event that the push-registry has been invalidated
 }
 

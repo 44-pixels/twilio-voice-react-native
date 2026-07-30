@@ -34,6 +34,7 @@ public final class VoiceIntentFilter {
     try {
       appContext.startService(copied);
     } catch (IllegalStateException | SecurityException e) {
+      ForkSentryReporter.reportWarning("voice.service.action_dispatch_failed", e);
       logger.warning(e, "startService failed for action=" + action);
     }
   }

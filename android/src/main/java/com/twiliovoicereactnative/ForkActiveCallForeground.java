@@ -30,6 +30,7 @@ final class ForkActiveCallForeground {
       }
       return true;
     } catch (RuntimeException error) {
+      ForkSentryReporter.reportError("voice.foreground.start_failed", error);
       logger.warning(error, "Failed to start active call foreground service");
       return false;
     }

@@ -6,6 +6,7 @@
 //
 
 #import "ForkVoipPushReporter.h"
+#import "ForkSentryReporter.h"
 
 // Twilio VoIP push payload keys.
 static NSString * const kForkTwilioPushCallSidKey = @"twi_call_sid";
@@ -96,6 +97,7 @@ static NSString * const kForkTwilioPushFromKey = @"twi_from";
 
     [self.provider reportNewIncomingCallWithUUID:uuid update:callUpdate completion:^(NSError *error) {
         if (error) {
+            [ForkSentryReporter fork_reportError:@"voice.callkit.synchronous_incoming_call_report_failed" cause:error];
             NSLog(@"[ForkVoipPushReporter] Failed to report incoming call synchronously: %@", error);
         }
     }];

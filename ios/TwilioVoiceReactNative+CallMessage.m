@@ -9,6 +9,9 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
+// >>> FORK KAR-878 — see ForkSentryReporter.h
+#import "ForkSentryReporter.h"
+// <<< FORK
 
 @interface TwilioVoiceReactNative (CallMessage) <TVOCallMessageDelegate>
 
@@ -43,16 +46,25 @@
         }
     }
     
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_reportWarning:@"voice.call_message.target_missing" cause:nil];
+    // <<< FORK
     NSLog(@"No match call or call invite for %@", callSid);
 }
 
 - (void)messageSentForCallSid:(NSString *)callSid voiceEventSid:(NSString *)voiceEventSid {
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_addBreadcrumb:@"voice.call_message.sent"];
+    // <<< FORK
     [self sendEventWithName:kTwilioVoiceReactNativeScopeCallMessage
                        body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventMessageSent,
                               kTwilioVoiceReactNativeVoiceEventSid: voiceEventSid}];
 }
 
 - (void)messageFailedForCallSid:(NSString *)callSid voiceEventSid:(NSString *)voiceEventSid error:(NSError *)error {
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_reportWarning:@"voice.call_message.failed" cause:error];
+    // <<< FORK
     // NOTE(mhuynh): We need a delay here to prevent race conditions where some errors are synchronously handled
     // by the C++ SDK. For those synchronously handled errors, the JS layer is not given enough time to construct
     // and bind event listeners for this event.

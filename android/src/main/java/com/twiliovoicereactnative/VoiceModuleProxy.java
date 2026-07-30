@@ -109,6 +109,9 @@ class VoiceModuleProxy {
         final WritableMap jsCall = ReactNativeArgumentsSerializer.serializeCall(callRecord);
         promise.resolve(jsCall);
       } catch (SecurityException e) {
+        // >>> FORK KAR-878 — see ForkSentryReporter.java
+        ForkSentryReporter.reportError("voice.call.connect_security_exception", e);
+        // <<< FORK
         // >>> FORK KAR-443 — terminate or release a failed outgoing setup
         ForkCallLifecycleCoordinator.outgoingSetupFailed(uuid);
         // <<< FORK
@@ -116,6 +119,9 @@ class VoiceModuleProxy {
       // >>> FORK KAR-443 — terminate or release any other synchronous setup failure
       } catch (RuntimeException e) {
         ForkCallLifecycleCoordinator.outgoingSetupFailed(uuid);
+        // >>> FORK KAR-878 — see ForkSentryReporter.java
+        ForkSentryReporter.reportError("voice.call.connect_exception", e);
+        // <<< FORK
         promise.rejectWithName(
           CommonConstants.ErrorCodeInvalidStateError,
           e.getMessage() == null ? "Unable to start outgoing call." : e.getMessage());
@@ -232,6 +238,9 @@ class VoiceModuleProxy {
     FirebaseMessaging.getInstance().getToken()
       .addOnCompleteListener(task -> {
         if (!task.isSuccessful()) {
+          // >>> FORK KAR-878 — see ForkSentryReporter.java
+          ForkSentryReporter.reportWarning("voice.fcm.token_unavailable", task.getException());
+          // <<< FORK
           final String warningMsg = reactApplicationContext.getString(
             R.string.fcm_token_registration_fail,
             task.getException()
@@ -245,6 +254,9 @@ class VoiceModuleProxy {
         String fcmToken = task.getResult();
 
         if (fcmToken == null) {
+          // >>> FORK KAR-878 — see ForkSentryReporter.java
+          ForkSentryReporter.reportWarning("voice.fcm.token_unavailable", null);
+          // <<< FORK
           final String warningMsg = reactApplicationContext.getString(R.string.fcm_token_null);
           logger.warning(warningMsg);
           promise.rejectWithName(CommonConstants.ErrorCodeInvalidStateError, warningMsg);
@@ -298,6 +310,9 @@ class VoiceModuleProxy {
       FirebaseMessaging.getInstance().getToken()
         .addOnCompleteListener(task -> {
           if (!task.isSuccessful()) {
+            // >>> FORK KAR-878 — see ForkSentryReporter.java
+            ForkSentryReporter.reportWarning("voice.fcm.token_unavailable", task.getException());
+            // <<< FORK
             final String warningMsg = this.reactApplicationContext
               .getString(R.string.fcm_token_registration_fail, task.getException());
             logger.warning(warningMsg);
@@ -309,6 +324,9 @@ class VoiceModuleProxy {
           String fcmToken = task.getResult();
 
           if (fcmToken == null) {
+            // >>> FORK KAR-878 — see ForkSentryReporter.java
+            ForkSentryReporter.reportWarning("voice.fcm.token_unavailable", null);
+            // <<< FORK
             final String warningMsg = this.reactApplicationContext.getString(R.string.fcm_token_null);
             logger.warning(warningMsg);
             promise.rejectWithName(CommonConstants.ErrorCodeInvalidStateError, warningMsg);
@@ -374,6 +392,9 @@ class VoiceModuleProxy {
       FirebaseMessaging.getInstance().getToken()
         .addOnCompleteListener(task -> {
           if (!task.isSuccessful()) {
+            // >>> FORK KAR-878 — see ForkSentryReporter.java
+            ForkSentryReporter.reportWarning("voice.fcm.token_unavailable", task.getException());
+            // <<< FORK
             final String warningMsg = this.reactApplicationContext
               .getString(R.string.fcm_token_registration_fail, task.getException());
             logger.warning(warningMsg);
@@ -385,6 +406,9 @@ class VoiceModuleProxy {
           String fcmToken = task.getResult();
 
           if (fcmToken == null) {
+            // >>> FORK KAR-878 — see ForkSentryReporter.java
+            ForkSentryReporter.reportWarning("voice.fcm.token_unavailable", null);
+            // <<< FORK
             final String warningMsg = this.reactApplicationContext
               .getString(R.string.fcm_token_null);
             logger.warning(warningMsg);
