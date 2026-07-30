@@ -22,6 +22,9 @@
 // >>> FORK KAR-873 — see ForkCallbackRequestStore
 #import "ForkCallbackRequestStore.h"
 // <<< FORK
+// >>> FORK KAR-869 — see ForkVoipPushReporter.h
+#import "ForkVoipPushReporter.h"
+// <<< FORK
 
 NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native";
 
@@ -42,7 +45,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     [ForkCallSounds rememberCallKitConfiguration:configuration];
     // <<< FORK
     CXProviderConfiguration *callKitConfiguration = [CXProviderConfiguration new];
-    
+
     if (configuration[kTwilioVoiceReactNativeCallKitMaximumCallGroups]) {
         callKitConfiguration.maximumCallGroups = [configuration[kTwilioVoiceReactNativeCallKitMaximumCallGroups] intValue];
     } else {
@@ -78,10 +81,17 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     // >>> FORK KAR-787 — see ForkCallSounds
     callKitConfiguration.ringtoneSound = [ForkCallSounds ringtoneSoundOverridingDefault:callKitConfiguration.ringtoneSound];
     // <<< FORK
-    
-    self.callKitProvider = [[CXProvider alloc] initWithConfiguration:callKitConfiguration];
+
+    // >>> FORK KAR-869 — adopt the shared provider (so a
+    // call reported from the push handler is answerable here) instead of a second one.
+    ForkVoipPushReporter *reporter = [ForkVoipPushReporter sharedReporter];
+    if (@available(iOS 14.0, *)) {
+        reporter.provider.configuration = callKitConfiguration;
+    }
+    self.callKitProvider = reporter.provider;
     [self.callKitProvider setDelegate:self queue:nil];
-    self.callKitCallController = [CXCallController new];
+    self.callKitCallController = reporter.callController;
+    // <<< FORK
 }
 
 - (NSString *)getDisplayName:(NSString *)template
@@ -136,14 +146,29 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     callUpdate.supportsUngrouping = NO;
     callUpdate.hasVideo = NO;
 
-    [self.callKitProvider reportNewIncomingCallWithUUID:callInvite.uuid update:callUpdate completion:^(NSError *error) {
-        if (!error) {
-            NSLog(@"Incoming call successfully reported.");
-        } else {
-            NSLog(@"Failed to report incoming call: %@.", error);
-        }
-    }];
+    // >>> FORK KAR-869 — if the push was already reported
+    // synchronously, enrich that call instead of reporting a second one.
+    NSUUID *reservedUuid = [[ForkVoipPushReporter sharedReporter] reservedUUIDForCallSid:callInvite.callSid];
+    if (reservedUuid != nil) {
+        [self.callKitProvider reportCallWithUUID:reservedUuid updated:callUpdate];
+    } else {
+        [self.callKitProvider reportNewIncomingCallWithUUID:callInvite.uuid update:callUpdate completion:^(NSError *error) {
+            if (!error) {
+                NSLog(@"Incoming call successfully reported.");
+            } else {
+                NSLog(@"Failed to report incoming call: %@.", error);
+            }
+        }];
+    }
+    // <<< FORK
 }
+
+// >>> FORK KAR-869
+- (NSUUID *)effectiveUUIDForCallInvite:(TVOCallInvite *)callInvite {
+    NSUUID *reservedUuid = [[ForkVoipPushReporter sharedReporter] reservedUUIDForCallSid:callInvite.callSid];
+    return reservedUuid != nil ? reservedUuid : callInvite.uuid;
+}
+// <<< FORK
 
 - (void)answerCallInvite:(NSUUID *)uuid
               completion:(void(^)(BOOL success, NSError *error))completionHandler {
@@ -163,7 +188,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 - (void)endCallWithUuid:(NSUUID *)uuid {
     CXEndCallAction *endCallAction = [[CXEndCallAction alloc] initWithCallUUID:uuid];
     CXTransaction *transaction = [[CXTransaction alloc] initWithAction:endCallAction];
-    
+
     [self.callKitCallController requestTransaction:transaction completion:^(NSError *error) {
         if (error) {
             NSLog(@"Failed to submit end-call transaction request: %@", error);
@@ -178,7 +203,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
                   contactHandle:(NSString *)contactHandle {
     self.accessToken = accessToken;
     self.twimlParams = params;
-    
+
     NSString *handle = @"Default Contact";
     if ([contactHandle length] > 0) {
         handle = contactHandle;
@@ -231,7 +256,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 - (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
                             completion:(void(^)(BOOL success))completionHandler {
     NSAssert(self.callInviteMap[uuid.UUIDString], @"No call invite");
-    
+
     TVOCallInvite *callInvite = self.callInviteMap[uuid.UUIDString];
     TVOAcceptOptions *acceptOptions = [TVOAcceptOptions optionsWithCallInvite:callInvite block:^(TVOAcceptOptionsBuilder *builder) {
         builder.uuid = uuid;
@@ -276,7 +301,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)providerDidBegin:(CXProvider *)provider {
-    
+
 }
 
 - (void)provider:(CXProvider *)provider didActivateAudioSession:(AVAudioSession *)audioSession {
@@ -300,8 +325,11 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
                              kTwilioVoiceReactNativeCallInviteEventKeyCallSid: callInvite.callSid,
                              kTwilioVoiceReactNativeEventKeyCallInvite: [self callInviteInfo:callInvite]}];
         [self.callInviteMap removeObjectForKey:action.callUUID.UUIDString];
+        // >>> FORK KAR-869 — invite rejected: release its push reservation
+        [[ForkVoipPushReporter sharedReporter] clearReservationForCallSid:callInvite.callSid];
+        // <<< FORK
     }
-    
+
     [action fulfill];
 }
 
@@ -310,7 +338,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     [TwilioVoiceReactNative twilioAudioDevice].block();
 
     [self.callKitProvider reportOutgoingCallWithUUID:action.callUUID startedConnectingAtDate:[NSDate date]];
-    
+
     __weak typeof(self) weakSelf = self;
     [self performVoiceCallWithUUID:action.callUUID client:nil completion:^(BOOL success, NSError *error) {
         __strong typeof(self) strongSelf = weakSelf;
@@ -321,7 +349,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
             NSLog(@"performVoiceCallWithUUID failed");
         }
     }];
-    
+
     [action fulfill];
 }
 
@@ -427,18 +455,18 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
         messageBody = @{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventDisconnected,
                         kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call]};
     }
-    
+
     [self sendEventWithName:kTwilioVoiceReactNativeScopeCall body:messageBody];
-    
+
     if (!self.userInitiatedDisconnect) {
         CXCallEndedReason reason = CXCallEndedReasonRemoteEnded;
         if (error) {
             reason = CXCallEndedReasonFailed;
         }
-        
+
         [self.callKitProvider reportCallWithUUID:call.uuid endedAtDate:[NSDate date] reason:reason];
     }
-    
+
     [self callDisconnected:call];
 }
 
@@ -460,7 +488,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
         self.callKitCompletionCallback = nil;
     }
     [self.callKitProvider reportCallWithUUID:call.uuid endedAtDate:[NSDate date] reason:CXCallEndedReasonFailed];
-    
+
     [self callDisconnected:call];
 }
 
@@ -540,7 +568,7 @@ previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
         NSLog(@"Can't find sound file");
         return;
     }
-    
+
     NSError *error;
     self.ringbackPlayer = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL URLWithString:ringtonePath] error:&error];
     if (error != nil) {
@@ -548,7 +576,7 @@ previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
     } else {
         self.ringbackPlayer.delegate = self;
         self.ringbackPlayer.numberOfLoops = -1;
-        
+
         self.ringbackPlayer.volume = 1.0f;
         [self.ringbackPlayer play];
     }
@@ -558,7 +586,7 @@ previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
     if (!self.ringbackPlayer.isPlaying) {
         return;
     }
-    
+
     [self.ringbackPlayer stop];
 }
 
