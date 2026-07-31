@@ -56,7 +56,7 @@ class VoiceModuleProxy {
         .callMessageListener(new CallMessageListenerProxy())
         .build();
       // >>> FORK KAR-443 — claim only after synchronous option validation
-      if (!ForkCallLifecycleCoordinator.claimOutgoing(uuid)) {
+      if (!ForkCallLifecycleCoordinator.claimOutgoing(reactApplicationContext, uuid)) {
         promise.rejectWithName(
           CommonConstants.ErrorCodeInvalidStateError,
           "Cannot start a second call while another call is in progress.");
@@ -64,13 +64,16 @@ class VoiceModuleProxy {
       }
       // <<< FORK
       try {
-        final Call call = VoiceApplicationProxy.getVoiceServiceApi().connect(
+        // >>> FORK KAR-443 — retain the created call across synchronous setup failure
+        final Call call = ForkCallLifecycleCoordinator.connectOutgoing(
+          uuid,
           connectOptions,
           new CallListenerProxy(
             uuid,
             VoiceApplicationProxy.getVoiceServiceApi().getServiceContext()
           )
         );
+        // <<< FORK
 
         CallRecordDatabase.CallRecord callRecord = new CallRecordDatabase.CallRecord(
           uuid,
@@ -87,8 +90,7 @@ class VoiceModuleProxy {
         VoiceApplicationProxy.getCallRecordDatabase().add(callRecord);
         // >>> FORK KAR-443 — foreground before registering outgoing calls with Telecom
         if (!VoiceApplicationProxy.getVoiceServiceApi().raiseOutgoingCallNotification(callRecord)) {
-          VoiceApplicationProxy.getCallRecordDatabase().remove(callRecord);
-          ForkCallLifecycleCoordinator.outgoingConnectFailed(uuid);
+          ForkCallLifecycleCoordinator.outgoingSetupFailed(uuid, call);
           promise.rejectWithName(
             CommonConstants.ErrorCodeInvalidStateError,
             "Unable to start active call foreground service.");
@@ -107,13 +109,13 @@ class VoiceModuleProxy {
         final WritableMap jsCall = ReactNativeArgumentsSerializer.serializeCall(callRecord);
         promise.resolve(jsCall);
       } catch (SecurityException e) {
-        // >>> FORK KAR-443 — release a failed outgoing reservation
-        ForkCallLifecycleCoordinator.outgoingConnectFailed(uuid);
+        // >>> FORK KAR-443 — terminate or release a failed outgoing setup
+        ForkCallLifecycleCoordinator.outgoingSetupFailed(uuid);
         // <<< FORK
         promise.rejectWithCode(31401, e.getMessage());
-      // >>> FORK KAR-443 — release any other synchronous outgoing setup failure
+      // >>> FORK KAR-443 — terminate or release any other synchronous setup failure
       } catch (RuntimeException e) {
-        ForkCallLifecycleCoordinator.outgoingConnectFailed(uuid);
+        ForkCallLifecycleCoordinator.outgoingSetupFailed(uuid);
         promise.rejectWithName(
           CommonConstants.ErrorCodeInvalidStateError,
           e.getMessage() == null ? "Unable to start outgoing call." : e.getMessage());
@@ -252,6 +254,12 @@ class VoiceModuleProxy {
         promise.resolve(fcmToken);
       });
   }
+
+  // >>> FORK KAR-492 — atomically consume a token after JS subscribes
+  public void consumePendingPushToken(ModuleProxy.UniversalPromise promise) {
+    ForkPushTokenChanged.consumePending(reactApplicationContext, promise);
+  }
+  // <<< FORK
 
   public void getVersion(ModuleProxy.UniversalPromise promise) {
     logger.debug(".getVersion()");

@@ -46,6 +46,11 @@ final class ForkTelecomManager {
     return ForkCoreTelecomManager.isTelecomAudioOwner(uuid);
   }
 
+  @NonNull
+  static String stateForLog(@Nullable java.util.UUID uuid) {
+    return ForkCoreTelecomManager.stateForLog(uuid);
+  }
+
   static void cancelIncomingCall(@Nullable String callSid) {
     ForkCoreTelecomManager.cancelIncomingCall(callSid);
   }

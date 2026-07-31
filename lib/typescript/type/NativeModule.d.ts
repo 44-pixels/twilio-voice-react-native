@@ -72,6 +72,7 @@ export interface TwilioVoiceReactNative extends NativeModulesStatic {
     voice_getCalls(): NativePromise<NativeCallInfo[]>;
     voice_getCallInvites(): NativePromise<NativeCallInviteInfo[]>;
     voice_getDeviceToken(): NativePromise<string>;
+    voice_consumePendingPushToken(): NativePromise<string | null>;
     voice_getVersion(): NativePromise<string>;
     voice_handleEvent(remoteMessage: Record<string, string>): NativePromise<boolean>;
     voice_register(accessToken: string): NativePromise<void>;

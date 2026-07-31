@@ -46,6 +46,8 @@ export declare interface Voice {
     /** @internal */
     emit(voiceEvent: Voice.Event.Unregistered): boolean;
     /** @internal */
+    emit(voiceEvent: Voice.Event.PushTokenChanged, token: string): boolean;
+    /** @internal */
     emit(voiceEvent: Voice.Event, ...args: any[]): boolean;
     /**
      * ----------------
@@ -149,6 +151,10 @@ export declare interface Voice {
     addListener(unregisteredEvent: Voice.Event.Unregistered, listener: Voice.Listener.Unregistered): this;
     /** {@inheritDoc (Voice:interface).(addListener:5)} */
     on(unregisteredEvent: Voice.Event.Unregistered, listener: Voice.Listener.Unregistered): this;
+    /** Raised when Firebase assigns a new Android push token. */
+    addListener(pushTokenChangedEvent: Voice.Event.PushTokenChanged, listener: Voice.Listener.PushTokenChanged): this;
+    /** Raised when Firebase assigns a new Android push token. */
+    on(pushTokenChangedEvent: Voice.Event.PushTokenChanged, listener: Voice.Listener.PushTokenChanged): this;
     /**
      * Generic event listener typings.
      * @param voiceEvent - The raised event string.
@@ -157,7 +163,7 @@ export declare interface Voice {
      * @returns - The call object.
      */
     addListener(voiceEvent: Voice.Event, listener: Voice.Listener.Generic): this;
-    /** {@inheritDoc (Voice:interface).(addListener:6)} */
+    /** {@inheritDoc (Voice:interface).(addListener:7)} */
     on(voiceEvent: Voice.Event, listener: Voice.Listener.Generic): this;
 }
 /**
@@ -203,6 +209,7 @@ export declare class Voice extends EventEmitter {
      * feature-set of the library.
      */
     constructor();
+    private _consumePendingPushToken;
     /**
      * Connect for devices on Android platforms.
      */
@@ -243,6 +250,7 @@ export declare class Voice extends EventEmitter {
      * {@link (Voice:namespace).Event.Unregistered} event.
      */
     private _handleUnregistered;
+    private _handlePushTokenChanged;
     /**
      * Audio devices updated event handler. Generates a new list of
      * {@link (AudioDevice:class) | AudioDevice objects} and emits it.
@@ -632,7 +640,9 @@ export declare namespace Voice {
          * See {@link (Voice:interface).(addListener:5)
          * | Voice.addListener(Unregistered)}.
          */
-        'Unregistered' = "unregistered"
+        'Unregistered' = "unregistered",
+        /** Raised when Firebase assigns a new Android push token. */
+        'PushTokenChanged' = "pushTokenChanged"
     }
     /**
      * Listener types for all events emitted by a {@link (Voice:class)
@@ -693,6 +703,8 @@ export declare namespace Voice {
          * See {@link (Voice:interface).(addListener:5)}.
          */
         type Unregistered = () => void;
+        /** Android FCM token-change event listener. */
+        type PushTokenChanged = (token: string) => void;
         /**
          * Generic event listener. This should be the function signature of any
          * event listener bound to any voice event.

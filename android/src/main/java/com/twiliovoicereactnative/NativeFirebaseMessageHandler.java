@@ -1,11 +1,13 @@
 // FORK — KAR-492
-// Owns: public native entry point for host-app Firebase Messaging multiplexers.
+// Owns: public native entry points for host-app Firebase Messaging multiplexers,
+// including Twilio payload routing and FCM token changes.
 // Hooks into: host app FirebaseMessagingService implementations that need to
 // route Twilio Voice payloads before RN/JS startup.
 // Re-check on SDK bump: VoiceFirebaseMessagingService.MessageHandler still
 // owns CallInvite/CancelledCallInvite handling, ForkCallLifecycleCoordinator
-// still wakes incoming calls before Voice.handleMessage, and Twilio call
-// payloads still carry twi_message_type=twilio.voice.call.
+// still wakes incoming calls before Voice.handleMessage, Twilio call payloads
+// still carry twi_message_type=twilio.voice.call, and onNewToken remains the
+// Firebase token-refresh callback.
 package com.twiliovoicereactnative;
 
 import android.content.Context;
@@ -39,5 +41,9 @@ public final class NativeFirebaseMessageHandler {
     // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
     return ForkCallLifecycleCoordinator.handleNativeFcm(context, data);
     // <<< FORK
+  }
+
+  public static void onNewToken(@NonNull Context context, @NonNull String token) {
+    ForkPushTokenChanged.onNewToken(context, token);
   }
 }

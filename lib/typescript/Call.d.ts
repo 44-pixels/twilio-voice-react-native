@@ -432,6 +432,12 @@ export declare class Call extends EventEmitter {
      */
     getInitialConnectedTimestamp(): Date | undefined;
     /**
+     * Get the UUID used to identify this call across the JavaScript and native
+     * layers.
+     * @returns The stable UUID of this call.
+     */
+    getUuid(): string;
+    /**
      * Get the call `SID`.
      * @returns
      *  - A `String` representing the `SID` of the call.

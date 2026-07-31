@@ -63,7 +63,11 @@ class CallInviteModuleProxy {
           .acceptCall(callRecord);
       } catch (SecurityException e) {
         logger.error(e.toString());
-        promise.rejectWithCode(31401, e.getMessage());
+        // >>> FORK KAR-443 — synchronous accept cleanup may already settle the promise
+        if (callRecord.getCallAcceptedPromise() != null) {
+          promise.rejectWithCode(31401, e.getMessage());
+        }
+        // <<< FORK
       }
     });
   }

@@ -175,6 +175,10 @@ function javaPackagePath(packageName) {
 function generatedServiceSource(packageName) {
   return `package ${packageName};
 
+// >>> FORK KAR-492 — forward generated-service token changes
+import androidx.annotation.NonNull;
+// <<< FORK
+
 import com.google.firebase.messaging.RemoteMessage;
 import com.twiliovoicereactnative.NativeFirebaseMessageHandler;
 
@@ -186,6 +190,14 @@ public final class ${GENERATED_SERVICE_NAME}
     if (NativeFirebaseMessageHandler.handle(getApplicationContext(), message)) return;
     super.onMessageReceived(message);
   }
+
+  // >>> FORK KAR-492 — forward generated-service token changes
+  @Override
+  public void onNewToken(@NonNull String token) {
+    NativeFirebaseMessageHandler.onNewToken(getApplicationContext(), token);
+    super.onNewToken(token);
+  }
+  // <<< FORK
 }
 `;
 }

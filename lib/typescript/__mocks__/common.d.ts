@@ -56,6 +56,7 @@ export declare const NativeModule: {
     voice_getCalls: jest.Mock<any, any>;
     voice_getCallInvites: jest.Mock<any, any>;
     voice_getDeviceToken: jest.Mock<any, any>;
+    voice_consumePendingPushToken: jest.Mock<any, any>;
     voice_getVersion: jest.Mock<any, any>;
     voice_handleEvent: jest.Mock<any, any>;
     voice_initializePushRegistry: jest.Mock<any, any>;

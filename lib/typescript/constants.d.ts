@@ -16,6 +16,8 @@ export declare enum Constants {
     'VoiceErrorKeyMessage' = "message",
     'VoiceEventRegistered' = "voiceEventRegistered",
     'VoiceEventUnregistered' = "voiceEventUnregistered",
+    'VoiceEventPushTokenChanged' = "voiceEventPushTokenChanged",
+    'VoiceEventPushToken' = "token",
     'CallInfoUuid' = "uuid",
     'CallInfoSid' = "sid",
     'CallInfoFrom' = "from",

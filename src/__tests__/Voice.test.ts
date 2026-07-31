@@ -88,6 +88,9 @@ describe('Voice class', () => {
           Constants.VoiceEventError,
           Constants.VoiceEventRegistered,
           Constants.VoiceEventUnregistered,
+          // >>> FORK KAR-492 — Android FCM token-change event
+          Constants.VoiceEventPushTokenChanged,
+          // <<< FORK
         ].forEach((event: string) => {
           expect(event in nativeEventHandler).toBe(true);
         });
@@ -102,6 +105,85 @@ describe('Voice class', () => {
       });
     });
   });
+
+  // >>> FORK KAR-492 — deliver persisted token changes only after subscription
+  describe(Voice.Event.PushTokenChanged, () => {
+    it('does not consume a pending token in the constructor', () => {
+      new Voice(); // eslint-disable-line no-new
+
+      expect(
+        jest.mocked(MockNativeModule.voice_consumePendingPushToken)
+      ).not.toHaveBeenCalled();
+    });
+
+    it('consumes and emits a pending token after the first listener subscribes', async () => {
+      const platformSpy = jest
+        .spyOn(Platform, 'OS', 'get')
+        .mockReturnValue('android');
+      jest
+        .mocked(MockNativeModule.voice_consumePendingPushToken)
+        .mockReturnValueOnce(
+          Promise.resolve(mockNativePromiseResolutionValue('pending-token'))
+        );
+      const voice = new Voice();
+      const listener = jest.fn();
+
+      voice.on(Voice.Event.PushTokenChanged, listener);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(
+        jest.mocked(MockNativeModule.voice_consumePendingPushToken)
+      ).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith('pending-token');
+      platformSpy.mockRestore();
+    });
+
+    it('leaves a native token-change signal pending without a subscriber', () => {
+      const platformSpy = jest
+        .spyOn(Platform, 'OS', 'get')
+        .mockReturnValue('android');
+      new Voice(); // eslint-disable-line no-new
+
+      MockNativeEventEmitter.emit(Constants.ScopeVoice, {
+        type: Constants.VoiceEventPushTokenChanged,
+        token: 'signal-token',
+      });
+
+      expect(
+        jest.mocked(MockNativeModule.voice_consumePendingPushToken)
+      ).not.toHaveBeenCalled();
+      platformSpy.mockRestore();
+    });
+
+    it('consumes a live token-change signal when subscribed', async () => {
+      const platformSpy = jest
+        .spyOn(Platform, 'OS', 'get')
+        .mockReturnValue('android');
+      const voice = new Voice();
+      const listener = jest.fn();
+      voice.on(Voice.Event.PushTokenChanged, listener);
+      await Promise.resolve();
+      await Promise.resolve();
+      jest.clearAllMocks();
+      jest
+        .mocked(MockNativeModule.voice_consumePendingPushToken)
+        .mockReturnValueOnce(
+          Promise.resolve(mockNativePromiseResolutionValue('persisted-token'))
+        );
+
+      MockNativeEventEmitter.emit(Constants.ScopeVoice, {
+        type: Constants.VoiceEventPushTokenChanged,
+        token: 'signal-token',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(listener).toHaveBeenCalledWith('persisted-token');
+      platformSpy.mockRestore();
+    });
+  });
+  // <<< FORK
 
   describe('on receiving a valid native event', () => {
     Object.values(mockVoiceNativeEvents).forEach(({ name, nativeEvent }) => {
@@ -613,9 +695,9 @@ describe('Voice class', () => {
     describe('.completeCallbackRequest', () => {
       it('invokes the native module', async () => {
         await new Voice().completeCallbackRequest('mock-callback-request-id');
-        expect(MockNativeModule.voice_clearCallbackRequest).toHaveBeenCalledWith(
-          'mock-callback-request-id'
-        );
+        expect(
+          MockNativeModule.voice_clearCallbackRequest
+        ).toHaveBeenCalledWith('mock-callback-request-id');
       });
     });
 
@@ -874,58 +956,66 @@ describe('Voice class', () => {
     });
 
     // >>> FORK KAR-787 — see type/CallSound.ts
-  describe('call sound settings', () => {
-    const settings: CallSound.Settings = {
-      ringtone: {mode: 'bundled', soundId: 'classic'},
-      callEnded: {mode: 'disabled'},
-    };
+    describe('call sound settings', () => {
+      const settings: CallSound.Settings = {
+        ringtone: { mode: 'bundled', soundId: 'classic' },
+        callEnded: { mode: 'disabled' },
+      };
 
-    it('persists settings through the native module', async () => {
-      const voice = new Voice();
+      it('persists settings through the native module', async () => {
+        const voice = new Voice();
 
-      await expect(voice.setCallSoundSettings(settings)).resolves.toBeUndefined();
+        await expect(
+          voice.setCallSoundSettings(settings)
+        ).resolves.toBeUndefined();
 
-      expect(MockNativeModule.voice_setCallSoundSettings).toHaveBeenCalledWith(
-        'bundled',
-        'classic',
-        'disabled'
-      );
+        expect(
+          MockNativeModule.voice_setCallSoundSettings
+        ).toHaveBeenCalledWith('bundled', 'classic', 'disabled');
+      });
+
+      it('returns persisted settings', async () => {
+        jest
+          .mocked(MockNativeModule.voice_getCallSoundSettings)
+          .mockReturnValueOnce(
+            Promise.resolve(mockNativePromiseResolutionValue(settings))
+          );
+
+        await expect(new Voice().getCallSoundSettings()).resolves.toEqual(
+          settings
+        );
+      });
+
+      it('returns available sounds', async () => {
+        const sounds = [
+          { id: 'classic', displayName: 'Classic', isDefault: true },
+        ];
+        jest
+          .mocked(MockNativeModule.voice_getAvailableRingtones)
+          .mockReturnValueOnce(
+            Promise.resolve(mockNativePromiseResolutionValue(sounds))
+          );
+
+        await expect(new Voice().getAvailableRingtones()).resolves.toEqual(
+          sounds
+        );
+      });
+
+      it('starts and stops preview playback', async () => {
+        const voice = new Voice();
+
+        await voice.previewCallSound('classic');
+        await voice.stopCallSoundPreview();
+
+        expect(MockNativeModule.voice_previewCallSound).toHaveBeenCalledWith(
+          'classic'
+        );
+        expect(MockNativeModule.voice_stopCallSoundPreview).toHaveBeenCalled();
+      });
     });
+    // <<< FORK
 
-    it('returns persisted settings', async () => {
-      MockNativeModule.voice_getCallSoundSettings.mockReturnValueOnce(
-        mockNativePromiseResolutionValue(settings)
-      );
-
-      await expect(new Voice().getCallSoundSettings()).resolves.toEqual(settings);
-    });
-
-    it('returns available sounds', async () => {
-      const sounds = [
-        {id: 'classic', displayName: 'Classic', isDefault: true},
-      ];
-      MockNativeModule.voice_getAvailableRingtones.mockReturnValueOnce(
-        mockNativePromiseResolutionValue(sounds)
-      );
-
-      await expect(new Voice().getAvailableRingtones()).resolves.toEqual(sounds);
-    });
-
-    it('starts and stops preview playback', async () => {
-      const voice = new Voice();
-
-      await voice.previewCallSound('classic');
-      await voice.stopCallSoundPreview();
-
-      expect(MockNativeModule.voice_previewCallSound).toHaveBeenCalledWith(
-        'classic'
-      );
-      expect(MockNativeModule.voice_stopCallSoundPreview).toHaveBeenCalled();
-    });
-  });
-  // <<< FORK
-
-  describe('.setCallKitConfiguration', () => {
+    describe('.setCallKitConfiguration', () => {
       const mockConfig = {
         callKitIconTemplateImageData: 'foo',
         callKitIncludesCallsInRecents: true,

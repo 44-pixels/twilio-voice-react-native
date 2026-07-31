@@ -134,6 +134,9 @@ export interface TwilioVoiceReactNative extends NativeModulesStatic {
   voice_getCalls(): NativePromise<NativeCallInfo[]>;
   voice_getCallInvites(): NativePromise<NativeCallInviteInfo[]>;
   voice_getDeviceToken(): NativePromise<string>;
+  // >>> FORK KAR-492 — cold-start token consumption after listener setup
+  voice_consumePendingPushToken(): NativePromise<string | null>;
+  // <<< FORK
   voice_getVersion(): NativePromise<string>;
   voice_handleEvent(
     remoteMessage: Record<string, string>

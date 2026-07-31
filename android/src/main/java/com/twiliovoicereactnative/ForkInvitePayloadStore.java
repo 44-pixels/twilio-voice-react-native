@@ -122,7 +122,11 @@ public final class ForkInvitePayloadStore {
     @Override
     public void onCallInvite(@NonNull CallInvite callInvite) {
       logger.log("rejecting reconstructed CallInvite " + callInvite.getCallSid());
-      callInvite.reject(context);
+      ForkCallInviteRejection.reject(
+        context,
+        callInvite,
+        null,
+        ForkCallInviteRejection.Reason.USER_REJECTED);
       ForkNotificationIdentity.cancelForCallSid(context, callInvite.getCallSid());
       clear(callInvite.getCallSid());
       ForkVoiceMessageGuard.markSettled(callInvite.getCallSid());

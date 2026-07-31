@@ -13,9 +13,13 @@ export interface NativeRegisteredEvent {
 export interface NativeUnregisteredEvent {
     type: Constants.VoiceEventUnregistered;
 }
+export interface NativePushTokenChangedEvent {
+    type: Constants.VoiceEventPushTokenChanged;
+    token: string;
+}
 export interface NativeCallInviteIncomingEvent {
     [Constants.VoiceEventType]: Constants.VoiceEventTypeValueIncomingCallInvite;
     callInvite: NativeCallInviteInfo;
 }
-export type NativeVoiceEvent = NativeAudioDevicesUpdatedEvent | NativeCallbackRequestedEvent | NativeCallInviteIncomingEvent | NativeErrorEvent | NativeRegisteredEvent | NativeUnregisteredEvent;
-export type NativeVoiceEventType = Constants.VoiceEventAudioDevicesUpdated | Constants.VoiceEventCallbackRequested | Constants.VoiceEventTypeValueIncomingCallInvite | Constants.VoiceEventError | Constants.VoiceEventRegistered | Constants.VoiceEventUnregistered;
+export type NativeVoiceEvent = NativeAudioDevicesUpdatedEvent | NativeCallbackRequestedEvent | NativeCallInviteIncomingEvent | NativeErrorEvent | NativeRegisteredEvent | NativeUnregisteredEvent | NativePushTokenChangedEvent;
+export type NativeVoiceEventType = Constants.VoiceEventAudioDevicesUpdated | Constants.VoiceEventCallbackRequested | Constants.VoiceEventTypeValueIncomingCallInvite | Constants.VoiceEventError | Constants.VoiceEventRegistered | Constants.VoiceEventUnregistered | Constants.VoiceEventPushTokenChanged;

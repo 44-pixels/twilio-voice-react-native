@@ -37,6 +37,11 @@ static NSString * const kTwilioVoiceReactNativeVoiceErrorKeyMessage = @"message"
 static NSString * const kTwilioVoiceReactNativeVoiceEventRegistered = @"voiceEventRegistered";
 static NSString * const kTwilioVoiceReactNativeVoiceEventUnregistered = @"voiceEventUnregistered";
 
+// >>> FORK KAR-492 — Android FCM token-change event
+static NSString * const kTwilioVoiceReactNativeVoiceEventPushTokenChanged = @"voiceEventPushTokenChanged";
+static NSString * const kTwilioVoiceReactNativeVoiceEventPushToken = @"token";
+// <<< FORK
+
 // Call Info
 static NSString * const kTwilioVoiceReactNativeCallInfoUuid = @"uuid";
 static NSString * const kTwilioVoiceReactNativeCallInfoSid = @"sid";
