@@ -330,6 +330,13 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 
 - (void)provider:(CXProvider *)provider didActivateAudioSession:(AVAudioSession *)audioSession {
     [TwilioVoiceReactNative twilioAudioDevice].enabled = YES;
+
+    // >>> FORK KAR-882 — ringback may have started before this session was active
+    // (played too quietly). Restart it now that the call-level session is up.
+    if (self.ringbackActive) {
+        [self playRingback];
+    }
+    // <<< FORK
 }
 
 - (void)provider:(CXProvider *)provider didDeactivateAudioSession:(AVAudioSession *)audioSession {
@@ -448,6 +455,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 - (void)callDidStartRinging:(TVOCall *)call {
     // >>> FORK KAR-878 — see ForkSentryReporter.h
     [ForkSentryReporter fork_addBreadcrumb:@"voice.call.ringing"];
+    // <<< FORK
+    // >>> FORK KAR-882 — mark ringing so ringback can be restarted on audio-session activation.
+    self.ringbackActive = YES;
     // <<< FORK
     [self playRingback];
 
@@ -626,6 +636,11 @@ previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
         return;
     }
 
+    // >>> FORK KAR-882 — safe to call again (e.g. after audio-session activation): rebuild the player.
+    [self.ringbackPlayer stop];
+    self.ringbackPlayer = nil;
+    // <<< FORK
+
     NSError *error;
     self.ringbackPlayer = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL URLWithString:ringtonePath] error:&error];
     if (error != nil) {
@@ -643,6 +658,10 @@ previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
 }
 
 - (void)stopRingback {
+    // >>> FORK KAR-882 — clear before the early-return so it resets even if ringback never played.
+    self.ringbackActive = NO;
+    // <<< FORK
+
     if (!self.ringbackPlayer.isPlaying) {
         return;
     }

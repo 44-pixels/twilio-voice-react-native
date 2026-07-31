@@ -45,6 +45,9 @@ FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallI
 @property (nonatomic, assign) BOOL userInitiatedDisconnect;
 
 @property (nonatomic, strong) AVAudioPlayer *ringbackPlayer;
+// >>> FORK KAR-882 — true while ringing, so ringback can be (re)started once the CallKit audio session activates.
+@property (nonatomic, assign) BOOL ringbackActive;
+// <<< FORK
 
 + (TVODefaultAudioDevice *)twilioAudioDevice;
 
