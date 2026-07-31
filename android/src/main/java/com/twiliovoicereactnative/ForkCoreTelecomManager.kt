@@ -208,6 +208,7 @@ internal object ForkCoreTelecomManager {
         }
         val endpoint = endpoints?.firstOrNull { it.type == endpointType }
         if (endpoint == null) {
+          ForkSentryReporter.reportWarning("voice.telecom.audio_endpoint_unavailable", null)
           logger.warning("Core Telecom endpoint unavailable for type $endpointType")
           callback.onComplete(false)
           return@launch
@@ -216,11 +217,13 @@ internal object ForkCoreTelecomManager {
         when (val result = callControl.requestEndpointChange(endpoint)) {
           is CallControlResult.Success -> callback.onComplete(true)
           is CallControlResult.Error -> {
+            ForkSentryReporter.reportWarning("voice.telecom.audio_endpoint_change_failed", null)
             logger.warning("Core Telecom endpoint request failed: ${result.errorCode}")
             callback.onComplete(false)
           }
         }
       } catch (error: Exception) {
+        ForkSentryReporter.reportWarning("voice.telecom.audio_endpoint_change_failed", error)
         logger.warning(error, "Core Telecom endpoint request failed")
         callback.onComplete(false)
       }
@@ -342,6 +345,7 @@ internal object ForkCoreTelecomManager {
           }
         }
       } catch (error: Exception) {
+        ForkSentryReporter.reportError("voice.telecom.registration_failed", error)
         logger.warning(error, "Core Telecom call registration failed")
         val fallbackState = synchronized(stateLock) {
           val matches = ownsTelecomState(callRecord.uuid)
@@ -433,12 +437,16 @@ internal object ForkCoreTelecomManager {
           }
           if (shouldAccept) VoiceApplicationProxy.getVoiceServiceApi().acceptCall(callRecord)
         }
-        is CallControlResult.Error -> failAnswer(
-          callRecord,
-          "Core Telecom rejected the answer: ${result.errorCode}",
-        )
+        is CallControlResult.Error -> {
+          ForkSentryReporter.reportError("voice.telecom.answer_failed", null)
+          failAnswer(
+            callRecord,
+            "Core Telecom rejected the answer: ${result.errorCode}",
+          )
+        }
       }
     } catch (error: Exception) {
+      ForkSentryReporter.reportError("voice.telecom.answer_failed", error)
       logger.warning(error, "Core Telecom answer failed")
       failAnswer(callRecord, "Core Telecom could not answer the call")
     }
@@ -472,11 +480,13 @@ internal object ForkCoreTelecomManager {
       when (val result = callControl.setActive()) {
         is CallControlResult.Success -> Unit
         is CallControlResult.Error -> {
+          ForkSentryReporter.reportError("voice.telecom.set_active_failed", null)
           logger.warning("Core Telecom setActive failed: ${result.errorCode}")
           ForkTwilioVoiceThread.runBlocking { callRecord.voiceCall?.disconnect() }
         }
       }
     } catch (error: Exception) {
+      ForkSentryReporter.reportError("voice.telecom.set_active_failed", error)
       logger.warning(error, "Core Telecom setActive failed")
       ForkTwilioVoiceThread.runBlocking { callRecord.voiceCall?.disconnect() }
     }
@@ -505,11 +515,13 @@ internal object ForkCoreTelecomManager {
           releaseOwnerIfSettled(callRecord)
         }
         is CallControlResult.Error -> {
+          ForkSentryReporter.reportError("voice.telecom.disconnect_failed", null)
           logger.warning("Core Telecom disconnect failed: ${result.errorCode}")
           cancelRegistration(callRecord.uuid)
         }
       }
     } catch (error: Exception) {
+      ForkSentryReporter.reportError("voice.telecom.disconnect_failed", error)
       logger.warning(error, "Core Telecom disconnect failed")
       cancelRegistration(callRecord.uuid)
     }

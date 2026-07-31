@@ -36,6 +36,9 @@ public class RegistrationListenerProxy {
           registrationException.getMessage()
         );
         Log.e(TAG, errorMessage);
+        // >>> FORK KAR-878 — see ForkSentryReporter.java
+        ForkSentryReporter.reportWarning("voice.registration.failed", registrationException);
+        // <<< FORK
 
         final WritableMap payload = JSEventEmitter.constructJSMap(
           new Pair(
@@ -76,6 +79,9 @@ public class RegistrationListenerProxy {
           registrationException.getMessage()
         );
         Log.e(TAG, errorMessage);
+        // >>> FORK KAR-878 — see ForkSentryReporter.java
+        ForkSentryReporter.reportWarning("voice.unregistration.failed", registrationException);
+        // <<< FORK
         final WritableMap payload = JSEventEmitter.constructJSMap(
           new Pair(CommonConstants.VoiceEventType, CommonConstants.VoiceEventError),
           new Pair(CommonConstants.VoiceErrorKeyError, ReactNativeArgumentsSerializer.serializeVoiceException(registrationException))

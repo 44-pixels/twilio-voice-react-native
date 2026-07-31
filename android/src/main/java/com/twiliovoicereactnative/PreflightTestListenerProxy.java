@@ -41,12 +41,18 @@ public class PreflightTestListenerProxy implements PreflightTest.Listener {
   @Override
   public void onPreflightFailed(@NonNull PreflightTest preflightTest, @NonNull CallException error) {
     logger.debug("onPreflightFailed");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.reportWarning("voice.preflight.failed", error);
+    // <<< FORK
     sendJSEvent(serializePreflightFailedEvent(error));
   }
 
   @Override
   public void onPreflightWarning(@NonNull PreflightTest preflightTest, @NonNull Set<Call.CallQualityWarning> currentWarnings, @NonNull Set<Call.CallQualityWarning> previousWarnings) {
     logger.debug("onPreflightWarning");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.addBreadcrumb("voice.preflight.quality_warnings_changed");
+    // <<< FORK
     sendJSEvent(serializePreflightWarningEvent(currentWarnings, previousWarnings));
   }
 

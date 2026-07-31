@@ -41,6 +41,9 @@ public class CallMessageListenerProxy implements Call.CallMessageListener {
   @Override
   public void onMessageFailure(String callSid, String voiceEventSID, VoiceException voiceException) {
     logger.debug("onMessageFailure");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.reportWarning("voice.call_message.failed", voiceException);
+    // <<< FORK
 
     // notify JS layer
     sendJSEvent(
@@ -55,6 +58,9 @@ public class CallMessageListenerProxy implements Call.CallMessageListener {
   @Override
   public void onMessageSent(String callSid, String voiceEventSID) {
     logger.debug("onMessageSent");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.addBreadcrumb("voice.call_message.sent");
+    // <<< FORK
 
     // notify JS layer
     sendJSEvent(
@@ -67,6 +73,9 @@ public class CallMessageListenerProxy implements Call.CallMessageListener {
   @Override
   public void onMessageReceived(String callSid, CallMessage callMessage) {
     logger.debug("onMessageReceived");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.addBreadcrumb("voice.call_message.received");
+    // <<< FORK
 
     //final call record
     final CallRecord callRecord =

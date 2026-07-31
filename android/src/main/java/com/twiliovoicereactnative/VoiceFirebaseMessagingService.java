@@ -31,6 +31,9 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
     @Override
     public void onCallInvite(@NonNull CallInvite callInvite) {
       logger.log(String.format("onCallInvite %s", callInvite.getCallSid()));
+      // >>> FORK KAR-878 — see ForkSentryReporter.java
+      ForkSentryReporter.addBreadcrumb("voice.call_invite.received");
+      // <<< FORK
 
       final CallRecord callRecord = new CallRecord(UUID.randomUUID(), callInvite);
       // >>> FORK KAR-443 — enforce one Twilio call before this invite changes shared state
@@ -61,6 +64,9 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
     public void onCancelledCallInvite(@NonNull CancelledCallInvite cancelledCallInvite,
                                       @Nullable CallException callException) {
       logger.log(String.format("onCancelledCallInvite %s", cancelledCallInvite.getCallSid()));
+      // >>> FORK KAR-878 — see ForkSentryReporter.java
+      ForkSentryReporter.addBreadcrumb("voice.call_invite.cancelled");
+      // <<< FORK
 
       // >>> FORK KAR-443 — a cancellation callback never owns an unbound invite wake lock
       ForkIncomingCallWakeLock.releaseForPayload(payload);
@@ -105,6 +111,9 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
       // >>> FORK KAR-443 — see ForkCallLifecycleCoordinator.java
       if (!ForkCallLifecycleCoordinator.handleNativeFcm(this, remoteMessage.getData())) {
       // <<< FORK
+        // >>> FORK KAR-878 — see ForkSentryReporter.java
+        ForkSentryReporter.reportError("voice.fcm.invalid_twilio_payload", null);
+        // <<< FORK
         logger.error("The message was not a valid Twilio Voice SDK payload: " +
           remoteMessage.getData());
       }

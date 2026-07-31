@@ -20,6 +20,9 @@ Pod::Spec.new do |s|
 
   s.dependency "React-Core"
   s.dependency "TwilioVoice", "6.13.3"
+  # >>> FORK KAR-878 — see ForkSentryReporter.h
+  s.dependency "Sentry", "9.5.1"
+  # <<< FORK
   s.xcconfig  =  { 'VALID_ARCHS' => 'arm64 x86_64' }
   s.pod_target_xcconfig   = { 'VALID_ARCHS[sdk=iphoneos*]' => 'arm64', 'VALID_ARCHS[sdk=iphonesimulator*]' => 'arm64 x86_64' }
 end

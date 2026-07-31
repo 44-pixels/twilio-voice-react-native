@@ -9,6 +9,9 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
+// >>> FORK KAR-878 — see ForkSentryReporter.h
+#import "ForkSentryReporter.h"
+// <<< FORK
 // >>> FORK KAR-310 — see TwilioVoiceReactNative+Handle.m
 #import "TwilioVoiceReactNative+Handle.h"
 // <<< FORK
@@ -23,6 +26,9 @@
 @implementation TwilioVoiceReactNative (CallInvite)
 
 - (void)callInviteReceived:(TVOCallInvite *)callInvite {
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_addBreadcrumb:@"voice.call_invite.received"];
+    // <<< FORK
     // >>> FORK KAR-869 — key by the effective UUID (the one reported to CallKit) so
     // answer/end actions and JS resolve to this invite.
     self.callInviteMap[[self effectiveUUIDForCallInvite:callInvite].UUIDString] = callInvite;
@@ -36,6 +42,9 @@
 }
 
 - (void)cancelledCallInviteReceived:(TVOCancelledCallInvite *)cancelledCallInvite error:(NSError *)error {
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_addBreadcrumb:@"voice.call_invite.cancelled"];
+    // <<< FORK
     NSString *uuid;
     for (NSString *uuidKey in [self.callInviteMap allKeys]) {
         TVOCallInvite *callInvite = self.callInviteMap[uuidKey];
@@ -44,6 +53,9 @@
             break;
         }
     }
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    if (!uuid) { [ForkSentryReporter fork_reportError:@"voice.call_invite.cancelled_without_match" cause:nil]; return; }
+    // <<< FORK
     NSAssert(uuid, @"No matching call invite");
     self.cancelledCallInviteMap[uuid] = cancelledCallInvite;
 

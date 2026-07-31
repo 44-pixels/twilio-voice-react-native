@@ -11,6 +11,9 @@
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
 #import "TwilioVoiceStatsReport.h"
+// >>> FORK KAR-878 — see ForkSentryReporter.h
+#import "ForkSentryReporter.h"
+// <<< FORK
 // >>> FORK KAR-873 — see TwilioVoiceReactNative+ForkCallbackRequest
 #import "ForkCallbackRequestStore.h"
 #import "TwilioVoiceReactNative+ForkCallbackRequest.h"
@@ -302,6 +305,9 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
         }
 
         if (!portDescription) {
+            // >>> FORK KAR-878 — see ForkSentryReporter.h
+            [ForkSentryReporter fork_reportWarning:@"voice.audio.built_in_microphone_unavailable" cause:nil];
+            // <<< FORK
             NSLog(@"Built-in mic not found");
             return NO;
         }
@@ -315,6 +321,9 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
         }
 
         if (!portDescription) {
+            // >>> FORK KAR-878 — see ForkSentryReporter.h
+            [ForkSentryReporter fork_reportWarning:@"voice.audio.bluetooth_device_unavailable" cause:nil];
+            // <<< FORK
             NSLog(@"Bluetooth device %@ not found", device[kTwilioVoiceReactNativeAudioDeviceKeyName]);
             return NO;
         }
@@ -324,6 +333,9 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
     NSError *inputError;
     [[AVAudioSession sharedInstance] setPreferredInput:portDescription error:&inputError];
     if (inputError) {
+        // >>> FORK KAR-878 — see ForkSentryReporter.h
+        [ForkSentryReporter fork_reportError:@"voice.audio.preferred_input_failed" cause:inputError];
+        // <<< FORK
         NSLog(@"Failed to set preferred input: %@", inputError);
         return NO;
     }
@@ -334,6 +346,9 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
         NSError *outputError;
         [[AVAudioSession sharedInstance] overrideOutputAudioPort:outputOverride error:&outputError];
         if (outputError) {
+            // >>> FORK KAR-878 — see ForkSentryReporter.h
+            [ForkSentryReporter fork_reportError:@"voice.audio.output_override_failed" cause:outputError];
+            // <<< FORK
             NSLog(@"Failed to override output port: %@", outputError);
             return NO;
         }
@@ -508,6 +523,9 @@ RCT_EXPORT_METHOD(voice_register:(NSString *)accessToken
                                          completion:^(NSError *error) {
                 self.registrationInProgress = NO;
                 if (error) {
+                    // >>> FORK KAR-878 — see ForkSentryReporter.h
+                    [ForkSentryReporter fork_reportWarning:@"voice.registration.failed" cause:error];
+                    // <<< FORK
                     NSString *errorMessage = [error localizedDescription];
                     NSNumber *errorCode = @(error.code);
 
@@ -532,6 +550,9 @@ RCT_EXPORT_METHOD(voice_register:(NSString *)accessToken
             }];
         } else {
             self.registrationInProgress = NO;
+            // >>> FORK KAR-878 — see ForkSentryReporter.h
+            [ForkSentryReporter fork_reportWarning:@"voice.pushkit.device_token_unavailable" cause:nil];
+            // <<< FORK
             [self rejectPromiseWithName:resolver
                 name:kTwilioVoiceReactNativeErrorCodeInvalidStateError
                 message:@"Failed to initialize PushKit device token"
@@ -588,6 +609,9 @@ RCT_EXPORT_METHOD(voice_unregister:(NSString *)accessToken
                                            completion:^(NSError *error) {
                 self.registrationInProgress = NO;
                 if (error) {
+                    // >>> FORK KAR-878 — see ForkSentryReporter.h
+                    [ForkSentryReporter fork_reportWarning:@"voice.unregistration.failed" cause:error];
+                    // <<< FORK
                     NSString *errorMessage = [error localizedDescription];
                     NSNumber *errorCode = @(error.code);
 
@@ -611,6 +635,9 @@ RCT_EXPORT_METHOD(voice_unregister:(NSString *)accessToken
             }];
         } else {
             self.registrationInProgress = NO;
+            // >>> FORK KAR-878 — see ForkSentryReporter.h
+            [ForkSentryReporter fork_reportWarning:@"voice.pushkit.device_token_unavailable" cause:nil];
+            // <<< FORK
 
             NSString *errorMessage = @"Failed to initialize PushKit device token";
             [self rejectPromiseWithName:resolver

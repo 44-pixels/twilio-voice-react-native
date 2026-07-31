@@ -73,6 +73,9 @@ dependencies {
   //noinspection GradleDynamicVersion
   implementation "com.facebook.react:react-native:+"  // From node_modules
   implementation "com.twilio:voice-android:${versions.voiceAndroid}"
+  // >>> FORK KAR-878 — see ForkSentryReporter.java
+  compileOnly "io.sentry:sentry-android:8.33.0"
+  // <<< FORK
   implementation "androidx.core:core:${versions.androidxCore}"
   implementation "androidx.core:core-telecom:${versions.androidxCoreTelecom}"
   implementation "androidx.lifecycle:lifecycle-extensions:${versions.androidxLifecycle}"

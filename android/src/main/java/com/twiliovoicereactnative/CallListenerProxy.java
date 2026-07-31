@@ -48,6 +48,9 @@ class CallListenerProxy implements Call.Listener {
   @Override
   public void onConnectFailure(@NonNull Call call, @NonNull CallException callException) {
     debug("onConnectFailure");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.reportError("voice.call.connect_failed", callException);
+    // <<< FORK
 
     // >>> FORK KAR-857 — see ForkCallIssueState.java
     ForkCallIssueState.ended(uuid);
@@ -81,6 +84,9 @@ class CallListenerProxy implements Call.Listener {
   @Override
   public void onRinging(@NonNull Call call) {
     debug("onRinging");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.addBreadcrumb("voice.call.ringing");
+    // <<< FORK
 
     // find call record
     // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
@@ -116,6 +122,9 @@ class CallListenerProxy implements Call.Listener {
   @Override
   public void onConnected(@NonNull Call call) {
     debug("onConnected");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.addBreadcrumb("voice.call.connected");
+    // <<< FORK
 
     // find call record
     // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
@@ -142,6 +151,9 @@ class CallListenerProxy implements Call.Listener {
   @Override
   public void onReconnecting(@NonNull Call call, @NonNull CallException callException) {
     debug("onReconnecting");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.addBreadcrumb("voice.call.reconnecting");
+    // <<< FORK
 
     // find & update call record
     // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
@@ -163,6 +175,9 @@ class CallListenerProxy implements Call.Listener {
   @Override
   public void onReconnected(@NonNull Call call) {
     debug("onReconnected");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.addBreadcrumb("voice.call.reconnected");
+    // <<< FORK
 
     // find & update call record
     // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
@@ -183,6 +198,9 @@ class CallListenerProxy implements Call.Listener {
   @Override
   public void onDisconnected(@NonNull Call call, @Nullable CallException callException) {
     debug("onDisconnected");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    if (callException != null) ForkSentryReporter.reportError("voice.call.disconnected_with_error", callException);
+    // <<< FORK
 
     // >>> FORK KAR-857 — see ForkCallIssueState.java
     ForkCallIssueState.ended(uuid);
@@ -211,6 +229,9 @@ class CallListenerProxy implements Call.Listener {
                                            @NonNull Set<Call.CallQualityWarning> currentWarnings,
                                            @NonNull Set<Call.CallQualityWarning> previousWarnings) {
     debug("onCallQualityWarningsChanged");
+    // >>> FORK KAR-878 — see ForkSentryReporter.java
+    ForkSentryReporter.addBreadcrumb("voice.call.quality_warnings_changed");
+    // <<< FORK
 
     // find call record
     // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
