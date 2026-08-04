@@ -29,8 +29,34 @@ NS_ASSUME_NONNULL_BEGIN
 // The UUID reserved for a call SID by a prior report, if any.
 - (nullable NSUUID *)reservedUUIDForCallSid:(nullable NSString *)callSid;
 
-// Release a reservation once the invite is cancelled / rejected.
+// YES if this UUID was reported from a push and the invite is still expected.
+- (BOOL)hasReservationForUUID:(nullable NSUUID *)uuid;
+
+// Release a reservation (and any pending-answer / declined state) once the
+// invite is cancelled / rejected.
 - (void)clearReservationForCallSid:(nullable NSString *)callSid;
+
+// >>> FORK KAR-891 — bridge a CallKit answer/end that lands during cold start,
+// before the TVOCallInvite has been delivered to the RN module.
+//
+// The CallKit call is answerable (or endable) the instant the push is reported,
+// but the invite arrives several async hops later. These record the user's intent
+// against the reserved UUID so the module can act on it when the invite binds.
+
+// User tapped Answer before the invite arrived. Keeps the call alive and starts a
+// safety timeout that ends the call if no invite ever binds.
+- (void)markPendingAnswerForUUID:(nullable NSUUID *)uuid;
+
+// Consumes a pending-answer (returns YES if one was set), cancelling its timeout.
+- (BOOL)consumePendingAnswerForUUID:(nullable NSUUID *)uuid;
+
+// User tapped End before the invite arrived. Drops any reservation/pending-answer
+// and remembers to reject the invite when it binds.
+- (void)markDeclinedForUUID:(nullable NSUUID *)uuid;
+
+// Consumes a declined marker (returns YES if one was set).
+- (BOOL)consumeDeclinedForUUID:(nullable NSUUID *)uuid;
+// <<< FORK
 
 @end
 

@@ -31,7 +31,21 @@
     // <<< FORK
     // >>> FORK KAR-869 — key by the effective UUID (the one reported to CallKit) so
     // answer/end actions and JS resolve to this invite.
-    self.callInviteMap[[self effectiveUUIDForCallInvite:callInvite].UUIDString] = callInvite;
+    NSUUID *effectiveUuid = [self effectiveUUIDForCallInvite:callInvite];
+
+    // >>> FORK KAR-891 — the user ended the CallKit call during cold start, before this
+    // invite arrived. Reject it instead of binding/ringing.
+    if ([[ForkVoipPushReporter sharedReporter] consumeDeclinedForUUID:effectiveUuid]) {
+        [ForkSentryReporter fork_addBreadcrumb:@"voice.call_invite.declined_before_arrival"];
+        [callInvite reject];
+        [[ForkVoipPushReporter sharedReporter] clearReservationForCallSid:callInvite.callSid];
+        // Release off the main thread — -[TVOCallInvite dealloc] blocks on rtc teardown (KAR-874).
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)callInvite; });
+        return;
+    }
+    // <<< FORK
+
+    self.callInviteMap[effectiveUuid.UUIDString] = callInvite;
 
     [self reportNewIncomingCall:callInvite];
 
@@ -39,6 +53,21 @@
                        body:@{
                          kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeVoiceEventTypeValueIncomingCallInvite,
                          kTwilioVoiceReactNativeEventKeyCallInvite: [self callInviteInfo:callInvite]}];
+
+    // >>> FORK KAR-891 — the user already answered from the CallKit UI during cold start,
+    // before this invite arrived. Accept it now. Ordering matters: the JS incoming-invite
+    // event above is sent first so InboundCallsService attaches its Accepted listener
+    // before the accept below fires it.
+    if ([[ForkVoipPushReporter sharedReporter] consumePendingAnswerForUUID:effectiveUuid]) {
+        [ForkSentryReporter fork_addBreadcrumb:@"voice.call_invite.deferred_answer_accepted"];
+        [self performAnswerVoiceCallWithUUID:effectiveUuid completion:^(BOOL success) {
+            if (!success) {
+                [ForkSentryReporter fork_reportError:@"voice.call.deferred_answer_failed" cause:nil];
+                [self.callKitProvider reportCallWithUUID:effectiveUuid endedAtDate:[NSDate date] reason:CXCallEndedReasonFailed];
+            }
+        }];
+    }
+    // <<< FORK
 }
 
 - (void)cancelledCallInviteReceived:(TVOCancelledCallInvite *)cancelledCallInvite error:(NSError *)error {
@@ -53,8 +82,20 @@
             break;
         }
     }
-    // >>> FORK KAR-878 — see ForkSentryReporter.h
-    if (!uuid) { [ForkSentryReporter fork_reportError:@"voice.call_invite.cancelled_without_match" cause:nil]; return; }
+    // >>> FORK KAR-891 — no bound invite yet: the caller hung up during the cold-start gap
+    // between the synchronous push report and -callInviteReceived:. End the reserved
+    // CallKit call so it doesn't stay stuck ringing/connected, and release its state.
+    if (!uuid) {
+        NSUUID *reservedUuid = [[ForkVoipPushReporter sharedReporter] reservedUUIDForCallSid:cancelledCallInvite.callSid];
+        if (reservedUuid != nil) {
+            [ForkSentryReporter fork_addBreadcrumb:@"voice.call_invite.cancelled_before_arrival"];
+            [self.callKitProvider reportCallWithUUID:reservedUuid endedAtDate:[NSDate date] reason:CXCallEndedReasonRemoteEnded];
+            [[ForkVoipPushReporter sharedReporter] clearReservationForCallSid:cancelledCallInvite.callSid];
+            return;
+        }
+        [ForkSentryReporter fork_reportError:@"voice.call_invite.cancelled_without_match" cause:nil];
+        return;
+    }
     // <<< FORK
     NSAssert(uuid, @"No matching call invite");
     self.cancelledCallInviteMap[uuid] = cancelledCallInvite;

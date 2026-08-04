@@ -87,6 +87,12 @@ FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallI
 - (NSUUID *)effectiveUUIDForCallInvite:(TVOCallInvite *)callInvite;
 // <<< FORK
 
+// >>> FORK KAR-891 — exposed so -callInviteReceived: can accept an invite that the user
+// answered from the CallKit UI during cold start, before the invite arrived.
+- (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
+                            completion:(void(^)(BOOL success))completionHandler;
+// <<< FORK
+
 @end
 
 @interface TwilioVoiceReactNative (PromiseAdapter)

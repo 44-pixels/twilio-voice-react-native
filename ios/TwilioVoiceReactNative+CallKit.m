@@ -362,6 +362,12 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
         // >>> FORK KAR-869 — invite rejected: release its push reservation
         [[ForkVoipPushReporter sharedReporter] clearReservationForCallSid:callInvite.callSid];
         // <<< FORK
+    // >>> FORK KAR-891 — ended during cold start before the invite arrived: remember to
+    // reject it when it binds (see TwilioVoiceReactNative+CallInvite), so it doesn't ring.
+    } else if ([[ForkVoipPushReporter sharedReporter] hasReservationForUUID:action.callUUID]) {
+        [ForkSentryReporter fork_addBreadcrumb:@"voice.callkit.end_action_before_invite"];
+        [[ForkVoipPushReporter sharedReporter] markDeclinedForUUID:action.callUUID];
+    // <<< FORK
     }
 
     [action fulfill];
@@ -394,8 +400,24 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     // >>> FORK KAR-878 — see ForkSentryReporter.h
     [ForkSentryReporter fork_addBreadcrumb:@"voice.callkit.answer_action"];
     // <<< FORK
-    // >>> FORK KAR-310 — fail action if invite already cancelled (answer-after-cancel race)
-    if (!self.callInviteMap[action.callUUID.UUIDString]) { [action fail]; return; }
+    // >>> FORK KAR-891 — the invite may not have been delivered yet. On cold start the
+    // push is reported to CallKit synchronously (KAR-869), so the call is answerable
+    // before -callInviteReceived: binds the invite. Distinguish "not yet" from "gone":
+    //  - a live push reservation for this UUID → invite still in flight: keep the call
+    //    alive and let -callInviteReceived: accept it (see TwilioVoiceReactNative+CallInvite).
+    //  - no reservation → genuinely cancelled (KAR-310 answer-after-cancel race) → fail.
+    if (!self.callInviteMap[action.callUUID.UUIDString]) {
+        if ([[ForkVoipPushReporter sharedReporter] hasReservationForUUID:action.callUUID]) {
+            [ForkSentryReporter fork_addBreadcrumb:@"voice.callkit.answer_action_before_invite"];
+            [[ForkVoipPushReporter sharedReporter] markPendingAnswerForUUID:action.callUUID];
+            [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
+            [TwilioVoiceReactNative twilioAudioDevice].block();
+            [action fulfill];
+            return;
+        }
+        [action fail];
+        return;
+    }
     // <<< FORK
     [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
     [TwilioVoiceReactNative twilioAudioDevice].block();
