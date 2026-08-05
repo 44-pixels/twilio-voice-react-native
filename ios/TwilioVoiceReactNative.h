@@ -49,6 +49,15 @@ FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallI
 @property (nonatomic, assign) BOOL ringbackActive;
 // <<< FORK
 
+// >>> FORK KAR-891 — UUID of an answered inbound call whose accept is waiting for CallKit
+// to activate the audio session (see -performAnswerCallAction: / -didActivateAudioSession:).
+// On cold start the call is answerable before the media path is ready; accepting into a
+// not-ready session lets the call be torn down (caller Decline, backend no_answer).
+// Declared in the main interface (not the (CallKit) category) so it is auto-synthesized —
+// a category property has no ivar storage and would crash with an unrecognized selector.
+@property (nonatomic, strong, nullable) NSUUID *forkPendingAudioAcceptUuid;
+// <<< FORK
+
 + (TVODefaultAudioDevice *)twilioAudioDevice;
 
 - (NSString *)warningNameWithNumber:(NSNumber *)warning;
@@ -91,13 +100,6 @@ FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallI
 // answered from the CallKit UI during cold start, before the invite arrived.
 - (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
                             completion:(void(^)(BOOL success))completionHandler;
-
-// >>> FORK KAR-891 — UUID of an answered inbound call whose accept is waiting for CallKit
-// to activate the audio session (see -performAnswerCallAction: / -didActivateAudioSession:).
-// On cold start the call is answerable before the media path is ready; accepting into a
-// not-ready session lets the call be torn down (caller Decline, backend no_answer).
-@property (nonatomic, strong, nullable) NSUUID *forkPendingAudioAcceptUuid;
-// <<< FORK
 
 @end
 
