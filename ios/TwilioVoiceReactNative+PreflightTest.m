@@ -9,7 +9,8 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
-// >>> FORK KAR-878 — see ForkSentryReporter.h
+// >>> FORK KAR-878 — see ForkLogger.h and ForkSentryReporter.h
+#import "ForkLogger.h"
 #import "ForkSentryReporter.h"
 // <<< FORK
 
@@ -174,7 +175,7 @@ RCT_EXPORT_METHOD(preflightTest_flushEvents:(RCTPromiseResolveBlock)resolver
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:sampleDict options:NSJSONWritingFragmentsAllowed error:&jsonParseError];
     if (jsonParseError != nil) {
         // warn that we could not parse the sample as json
-        NSLog(@"Failed to parse sample as json: %@", jsonParseError);
+        [ForkLogger fork_warningWithCause:jsonParseError format:@"Failed to parse sample as json: %@", jsonParseError];
     }
     NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
     
@@ -186,7 +187,7 @@ RCT_EXPORT_METHOD(preflightTest_flushEvents:(RCTPromiseResolveBlock)resolver
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:[report dictionaryReport] options:NSJSONWritingFragmentsAllowed error:&jsonParseError];
     if (jsonParseError != nil) {
         // warn that we could not parse the report as json
-        NSLog(@"Failed to parse report as json: %@", jsonParseError);
+        [ForkLogger fork_warningWithCause:jsonParseError format:@"Failed to parse report as json: %@", jsonParseError];
     }
     NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
     
@@ -280,7 +281,7 @@ RCT_EXPORT_METHOD(preflightTest_flushEvents:(RCTPromiseResolveBlock)resolver
                              errorMessage:(NSString **)errorMessage {
     
     if (self.preflightTest != nil) {
-        NSLog(@"existing preflight test object with status %lu", self.preflightTest.status);
+        [ForkLogger fork_info:@"existing preflight test object with status %lu", self.preflightTest.status];
         if (self.preflightTest.status == TVOPreflightTestStatusConnected || self.preflightTest.status == TVOPreflightTestStatusConnecting) {
             *errorName = kTwilioVoiceReactNativeErrorCodeInvalidStateError;
             *errorMessage = @"Existing preflight test in-progress.";

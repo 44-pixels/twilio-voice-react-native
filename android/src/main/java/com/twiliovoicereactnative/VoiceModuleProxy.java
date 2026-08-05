@@ -64,6 +64,9 @@ class VoiceModuleProxy {
       }
       // <<< FORK
       try {
+        // >>> FORK KAR-878 — see ForkSentryReporter.java
+        ForkSentryReporter.recordCallCreation(uuid);
+        // <<< FORK
         // >>> FORK KAR-443 — retain the created call across synchronous setup failure
         final Call call = ForkCallLifecycleCoordinator.connectOutgoing(
           uuid,
@@ -88,6 +91,12 @@ class VoiceModuleProxy {
         callRecord.setNotificationId(NotificationUtility.createNotificationIdentifier());
         // <<< FORK
         VoiceApplicationProxy.getCallRecordDatabase().add(callRecord);
+        // >>> FORK KAR-878 — see ForkSentryReporter.java
+        ForkSentryReporter.recordConnectResult(
+          uuid,
+          call,
+          VoiceApplicationProxy.getCallRecordDatabase().getCollection().size());
+        // <<< FORK
         // >>> FORK KAR-443 — foreground before registering outgoing calls with Telecom
         if (!VoiceApplicationProxy.getVoiceServiceApi().raiseOutgoingCallNotification(callRecord)) {
           ForkCallLifecycleCoordinator.outgoingSetupFailed(uuid, call);
@@ -110,7 +119,11 @@ class VoiceModuleProxy {
         promise.resolve(jsCall);
       } catch (SecurityException e) {
         // >>> FORK KAR-878 — see ForkSentryReporter.java
-        ForkSentryReporter.reportError("voice.call.connect_security_exception", e);
+        ForkSentryReporter.recordConnectException(
+          "voice.call.connect_security_exception",
+          uuid,
+          e,
+          VoiceApplicationProxy.getCallRecordDatabase().getCollection().size());
         // <<< FORK
         // >>> FORK KAR-443 — terminate or release a failed outgoing setup
         ForkCallLifecycleCoordinator.outgoingSetupFailed(uuid);
@@ -120,7 +133,11 @@ class VoiceModuleProxy {
       } catch (RuntimeException e) {
         ForkCallLifecycleCoordinator.outgoingSetupFailed(uuid);
         // >>> FORK KAR-878 — see ForkSentryReporter.java
-        ForkSentryReporter.reportError("voice.call.connect_exception", e);
+        ForkSentryReporter.recordConnectException(
+          "voice.call.connect_exception",
+          uuid,
+          e,
+          VoiceApplicationProxy.getCallRecordDatabase().getCollection().size());
         // <<< FORK
         promise.rejectWithName(
           CommonConstants.ErrorCodeInvalidStateError,

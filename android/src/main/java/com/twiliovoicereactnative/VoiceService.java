@@ -190,8 +190,26 @@ public class VoiceService extends Service {
       // >>> FORK KAR-876 — only disconnect a live call. Call.disconnect() on an
       // already-disconnected call segfaults in libtwilio_voice (Sentry KAREN-APP-E4).
       final Call voiceCall = callRecord.getVoiceCall();
-      if (voiceCall != null && voiceCall.getState() != Call.State.DISCONNECTED) {
+      final boolean willDisconnect =
+        voiceCall != null && voiceCall.getState() != Call.State.DISCONNECTED;
+      // >>> FORK KAR-878 — see ForkSentryReporter.java
+      ForkSentryReporter.recordEndCallAction(
+        callRecord.getUuid(),
+        true,
+        voiceCall,
+        willDisconnect,
+        getCallRecordDatabase().getCollection().size());
+      // <<< FORK
+      if (willDisconnect) {
+        // >>> FORK KAR-878 — see ForkSentryReporter.java
+        ForkSentryReporter.recordDisconnectBoundary(
+          "voice.call.disconnect_invocation.before", callRecord.getUuid(), voiceCall);
+        // <<< FORK
         ForkTwilioVoiceThread.runBlocking(voiceCall::disconnect);
+        // >>> FORK KAR-878 — see ForkSentryReporter.java
+        ForkSentryReporter.recordDisconnectBoundary(
+          "voice.call.disconnect_invocation.after", callRecord.getUuid(), voiceCall);
+        // <<< FORK
       } else {
         logger.warning("disconnect: no live voice call to disconnect");
       }

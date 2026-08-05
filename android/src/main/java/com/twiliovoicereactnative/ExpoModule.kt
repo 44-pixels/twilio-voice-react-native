@@ -1,7 +1,5 @@
 package com.twiliovoicereactnative
 
-import android.util.Log
-
 import com.facebook.react.bridge.ReactApplicationContext
 import com.twilio.voice.AudioCodec
 import com.twilio.voice.OpusCodec
@@ -20,6 +18,9 @@ import java.util.HashSet
 
 
 class ExpoModule : Module() {
+  // >>> FORK KAR-878 — see ForkLogger.java
+  private val logger = ForkLogger(ExpoModule::class.java)
+  // <<< FORK
   private class PromiseAdapter(private val promise: Promise) : ModuleProxy.UniversalPromise {
     override fun resolve(value: Any?) {
       promise.resolve(
@@ -48,7 +49,9 @@ class ExpoModule : Module() {
     Name(NAME)
 
     OnCreate {
-      Log.d(NAME, String.format("context %s", this@ExpoModule.appContext.reactContext))
+      // >>> FORK KAR-878 — see ForkLogger.java
+      logger.debug(String.format("context %s", this@ExpoModule.appContext.reactContext))
+      // <<< FORK
 
       val reactApplicationContext = this@ExpoModule.appContext.reactContext as ReactApplicationContext?
       if (reactApplicationContext != null) {

@@ -115,7 +115,11 @@ final class ForkCallLifecycleCoordinator {
       return;
     }
 
+    ForkSentryReporter.recordDisconnectBoundary(
+      "voice.call.disconnect_invocation.before", uuid, call);
     call.disconnect();
+    ForkSentryReporter.recordDisconnectBoundary(
+      "voice.call.disconnect_invocation.after", uuid, call);
   }
 
   static int authorizeAnswer(@NonNull CallRecordDatabase.CallRecord callRecord) {
@@ -125,6 +129,7 @@ final class ForkCallLifecycleCoordinator {
   static void activateFallbackAudio(@NonNull CallRecordDatabase.CallRecord callRecord) {
     if (!ForkTelecomManager.isTelecomAudioOwner(callRecord)) {
       VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().activate();
+      ForkSentryReporter.recordAudioSession("voice.audio_session.activated", callRecord.getUuid());
     }
   }
 
@@ -132,6 +137,7 @@ final class ForkCallLifecycleCoordinator {
     if (ForkSingleCallSession.isOwner(callRecord.getUuid())
       && !ForkTelecomManager.isTelecomAudioOwner(callRecord)) {
       VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
+      ForkSentryReporter.recordAudioSession("voice.audio_session.deactivated", callRecord.getUuid());
     }
   }
 
@@ -139,6 +145,7 @@ final class ForkCallLifecycleCoordinator {
     if (!ForkSingleCallSession.isOwner(uuid)) return;
     if (!ForkTelecomManager.isTelecomAudioOwner(uuid)) {
       VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
+      ForkSentryReporter.recordAudioSession("voice.audio_session.deactivated", uuid);
     }
     ForkSingleCallSession.releaseIfOwner(uuid);
   }
@@ -184,6 +191,7 @@ final class ForkCallLifecycleCoordinator {
                                 @NonNull CallRecordDatabase.CallRecord callRecord,
                                 @NonNull CallInvite callInvite,
                                 @NonNull AcceptOptions acceptOptions) {
+    ForkSentryReporter.recordCallCreation(callRecord.getUuid());
     try {
       ForkTwilioVoiceThread.runBlocking(() -> callRecord.setCall(
         callInvite.accept(
@@ -194,8 +202,17 @@ final class ForkCallLifecycleCoordinator {
       logger.warning(error, "event=call_accept result=synchronous_failure uuid="
         + callRecord.getUuid() + " sid=" + callRecord.getCallSid());
       cleanupSynchronousAcceptFailure(context, callRecord, error);
+      ForkSentryReporter.recordConnectException(
+        "voice.call.accept_exception",
+        callRecord.getUuid(),
+        error,
+        VoiceApplicationProxy.getCallRecordDatabase().getCollection().size());
       return false;
     }
+    ForkSentryReporter.recordConnectResult(
+      callRecord.getUuid(),
+      callRecord.getVoiceCall(),
+      VoiceApplicationProxy.getCallRecordDatabase().getCollection().size());
     ForkSingleCallSession.completeSetup(callRecord.getUuid());
     return true;
   }
@@ -391,6 +408,7 @@ final class ForkCallLifecycleCoordinator {
     VoiceService.removeForegroundNotificationIfRunning();
     VoiceApplicationProxy.getMediaPlayerManager().stop();
     VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().deactivate();
+    ForkSentryReporter.recordAudioSession("voice.audio_session.deactivated", uuid);
 
     String callSid = snapshot == null ? null : snapshot.callSid;
     ForkInvitePayloadStore.clear(callSid);

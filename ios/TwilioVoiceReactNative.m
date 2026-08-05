@@ -11,7 +11,8 @@
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
 #import "TwilioVoiceStatsReport.h"
-// >>> FORK KAR-878 — see ForkSentryReporter.h
+// >>> FORK KAR-878 — see ForkLogger.h and ForkSentryReporter.h
+#import "ForkLogger.h"
 #import "ForkSentryReporter.h"
 // <<< FORK
 // >>> FORK KAR-873 — see TwilioVoiceReactNative+ForkCallbackRequest
@@ -201,10 +202,10 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
         }
     }
 
-    NSLog(@"Available audio input devices");
+    [ForkLogger fork_debug:@"Available audio input devices"];
     NSArray *availableInputs = [[AVAudioSession sharedInstance] availableInputs];
     for (AVAudioSessionPortDescription *port in availableInputs) {
-        NSLog(@"\t%@, %@, %@", port.portType, port. portName, port.UID);
+        [ForkLogger fork_debug:@"\t%@, %@, %@", port.portType, port. portName, port.UID];
 
         if ([port.portType isEqualToString:AVAudioSessionPortBluetoothHFP]) {
             NSUUID *uuid = [NSUUID UUID];
@@ -216,17 +217,17 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
         }
     }
 
-    NSLog(@"Current route, inputs");
+    [ForkLogger fork_debug:@"Current route, inputs"];
     AVAudioSessionRouteDescription *currentRoute = [[AVAudioSession sharedInstance] currentRoute];
     NSArray *inputs = currentRoute.inputs;
     for (AVAudioSessionPortDescription *port in inputs) {
-        NSLog(@"\t%@, %@, %@", port.portType, port.portName, port.UID);
+        [ForkLogger fork_debug:@"\t%@, %@, %@", port.portType, port.portName, port.UID];
     }
 
-    NSLog(@"Current route, outputs");
+    [ForkLogger fork_debug:@"Current route, outputs"];
     NSArray *outputs = currentRoute.outputs;
     for (AVAudioSessionPortDescription *port in outputs) {
-        NSLog(@"\t%@, %@, %@", port.portType, port.portName, port.UID);
+        [ForkLogger fork_debug:@"\t%@, %@, %@", port.portType, port.portName, port.UID];
 
         if ([port.portType isEqualToString:AVAudioSessionPortBuiltInReceiver]) {
             for (NSString *key in [self.audioDevices allKeys]) {
@@ -255,7 +256,7 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
             }
 
             if (!found) {
-                NSLog(@"Unidentified output device selected: %@, %@, %@", port.portType, port.portName, port.UID);
+                [ForkLogger fork_warning:@"Unidentified output device selected: %@, %@, %@", port.portType, port.portName, port.UID];
                 NSUUID *uuid = [NSUUID UUID];
                 NSDictionary *unidentifiedDevice = @{ kTwilioVoiceReactNativeAudioDeviceKeyUuid: uuid.UUIDString,
                                                       kTwilioVoiceReactNativeAudioDeviceKeyType: [self audioPortTypeMapping:port.portType],
@@ -284,7 +285,7 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
 
 - (BOOL)selectAudioDevice:(NSString *)uuid {
     if (!self.audioDevices[uuid]) {
-        NSLog(@"No matching audio device found for %@", uuid);
+        [ForkLogger fork_warning:@"No matching audio device found for %@", uuid];
         return NO;
     }
 
@@ -292,7 +293,7 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
     NSString *portUid = device[kTwilioVoiceAudioDeviceUid];
     NSString *portType = device[kTwilioVoiceReactNativeAudioDeviceKeyType];
 
-    NSLog(@"Selecting %@(%@), %@", device[kTwilioVoiceReactNativeAudioDeviceKeyName], device[kTwilioVoiceReactNativeAudioDeviceKeyType], device[kTwilioVoiceAudioDeviceUid]);
+    [ForkLogger fork_info:@"Selecting %@(%@), %@", device[kTwilioVoiceReactNativeAudioDeviceKeyName], device[kTwilioVoiceReactNativeAudioDeviceKeyType], device[kTwilioVoiceAudioDeviceUid]];
 
     AVAudioSessionPortDescription *portDescription = nil;
     if ([portType isEqualToString:kTwilioVoiceReactNativeAudioDeviceKeyEarpiece]) {
@@ -308,7 +309,7 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
             // >>> FORK KAR-878 — see ForkSentryReporter.h
             [ForkSentryReporter fork_reportWarning:@"voice.audio.built_in_microphone_unavailable" cause:nil];
             // <<< FORK
-            NSLog(@"Built-in mic not found");
+            [ForkLogger fork_warning:@"Built-in mic not found"];
             return NO;
         }
     } else if ([portType isEqualToString:kTwilioVoiceReactNativeAudioDeviceKeyBluetooth]) {
@@ -324,7 +325,7 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
             // >>> FORK KAR-878 — see ForkSentryReporter.h
             [ForkSentryReporter fork_reportWarning:@"voice.audio.bluetooth_device_unavailable" cause:nil];
             // <<< FORK
-            NSLog(@"Bluetooth device %@ not found", device[kTwilioVoiceReactNativeAudioDeviceKeyName]);
+            [ForkLogger fork_warning:@"Bluetooth device %@ not found", device[kTwilioVoiceReactNativeAudioDeviceKeyName]];
             return NO;
         }
     }
@@ -336,7 +337,7 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
         // >>> FORK KAR-878 — see ForkSentryReporter.h
         [ForkSentryReporter fork_reportError:@"voice.audio.preferred_input_failed" cause:inputError];
         // <<< FORK
-        NSLog(@"Failed to set preferred input: %@", inputError);
+        [ForkLogger fork_errorWithCause:inputError format:@"Failed to set preferred input: %@", inputError];
         return NO;
     }
 
@@ -349,7 +350,7 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
             // >>> FORK KAR-878 — see ForkSentryReporter.h
             [ForkSentryReporter fork_reportError:@"voice.audio.output_override_failed" cause:outputError];
             // <<< FORK
-            NSLog(@"Failed to override output port: %@", outputError);
+            [ForkLogger fork_errorWithCause:outputError format:@"Failed to override output port: %@", outputError];
             return NO;
         }
     }
@@ -440,12 +441,12 @@ RCT_EXPORT_MODULE();
 }
 
 - (void)startObserving {
-    NSLog(@"Started observing");
+    [ForkLogger fork_debug:@"Started observing"];
     _hasObserver = YES;
 }
 
 - (void)stopObserving {
-    NSLog(@"Stopped observing");
+    [ForkLogger fork_debug:@"Stopped observing"];
     _hasObserver = NO;
 }
 
@@ -453,7 +454,7 @@ RCT_EXPORT_MODULE();
     if (_hasObserver) {
         [super sendEventWithName:eventName body:body];
     } else {
-        NSLog(@"No event observer registered yet. Omitting event: %@, event body: %@", eventName, body);
+        [ForkLogger fork_warning:@"No event observer registered yet. Omitting event: %@, event body: %@", eventName, body];
     }
 }
 
@@ -501,7 +502,7 @@ RCT_EXPORT_METHOD(voice_register:(NSString *)accessToken
 {
 #if TARGET_IPHONE_SIMULATOR
     if (!self.deviceTokenData) {
-        NSLog(@"Please note that PushKit and incoming call are not supported on simulators");
+        [ForkLogger fork_info:@"Please note that PushKit and incoming call are not supported on simulators"];
         NSString *testDeviceToken = @"deadbeefdeadbeefdeadbeefdeadbeef";
         self.deviceTokenData = [testDeviceToken dataUsingEncoding:NSUTF8StringEncoding];
     }
@@ -587,7 +588,7 @@ RCT_EXPORT_METHOD(voice_unregister:(NSString *)accessToken
 {
 #if TARGET_IPHONE_SIMULATOR
     if (!self.deviceTokenData) {
-        NSLog(@"Please note that PushKit and incoming call are not supported on simulators");
+        [ForkLogger fork_info:@"Please note that PushKit and incoming call are not supported on simulators"];
         NSString *testDeviceToken = @"deadbeefdeadbeefdeadbeefdeadbeef";
         self.deviceTokenData = [testDeviceToken dataUsingEncoding:NSUTF8StringEncoding];
     }
@@ -1121,7 +1122,7 @@ RCT_EXPORT_METHOD(cancelledCallInvite_getTo:(NSString *)uuid
 
 - (NSString *)warningNameWithNumber:(NSNumber *)warning {
     if ([warning intValue] < 0 || [warning intValue] > 4) {
-        NSLog(@"Warning number out of TVOCallQualityWarning range");
+        [ForkLogger fork_warning:@"Warning number out of TVOCallQualityWarning range"];
         return @"undefined";
     }
 

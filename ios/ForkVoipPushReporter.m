@@ -5,6 +5,7 @@
 // FORK — KAR-869 (Sentry KAREN-APP-5M). See ForkVoipPushReporter.h.
 //
 
+#import "ForkLogger.h"
 #import "ForkVoipPushReporter.h"
 #import "ForkSentryReporter.h"
 
@@ -98,7 +99,8 @@ static NSString * const kForkTwilioPushFromKey = @"twi_from";
     [self.provider reportNewIncomingCallWithUUID:uuid update:callUpdate completion:^(NSError *error) {
         if (error) {
             [ForkSentryReporter fork_reportError:@"voice.callkit.synchronous_incoming_call_report_failed" cause:error];
-            NSLog(@"[ForkVoipPushReporter] Failed to report incoming call synchronously: %@", error);
+            [ForkLogger fork_errorWithCause:error
+                                     format:@"[ForkVoipPushReporter] Failed to report incoming call synchronously: %@", error];
         }
     }];
 
@@ -127,6 +129,8 @@ static NSString * const kForkTwilioPushFromKey = @"twi_from";
 
 - (void)providerDidReset:(CXProvider *)provider {
     @synchronized (self.lock) {
+        [ForkSentryReporter fork_addBreadcrumb:@"voice.callkit.provider_reset"
+                                          data:@{@"pending_push_reservation_count": @(self.reservationsByCallSid.count)}];
         [self.reservationsByCallSid removeAllObjects];
     }
 }

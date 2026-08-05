@@ -1,7 +1,6 @@
 package com.twiliovoicereactnative;
 
 import android.content.Context;
-import android.util.Log;
 import android.util.Pair;
 import com.facebook.react.bridge.WritableMap;
 import com.twilio.voice.RegistrationException;
@@ -9,13 +8,17 @@ import com.twilio.voice.RegistrationListener;
 import com.twilio.voice.UnregistrationListener;
 
 public class RegistrationListenerProxy {
-  private static final String TAG = "RegistrationListenerProxy";
+  // >>> FORK KAR-878 — see ForkLogger.java
+  private static final ForkLogger logger = new ForkLogger(RegistrationListenerProxy.class);
+  // <<< FORK
 
   public static RegistrationListener createRegistrationListener(Context context, ModuleProxy.UniversalPromise promise) {
     return new RegistrationListener() {
       @Override
       public void onRegistered(String accessToken, String fcmToken) {
-        Log.d(TAG, "Successfully registered FCM");
+        // >>> FORK KAR-878 — see ForkLogger.java
+        logger.debug("Successfully registered FCM");
+        // <<< FORK
 
         final WritableMap payload = JSEventEmitter.constructJSMap(
           new Pair(CommonConstants.VoiceEventType, CommonConstants.VoiceEventRegistered)
@@ -35,9 +38,8 @@ public class RegistrationListenerProxy {
           registrationException.getErrorCode(),
           registrationException.getMessage()
         );
-        Log.e(TAG, errorMessage);
-        // >>> FORK KAR-878 — see ForkSentryReporter.java
-        ForkSentryReporter.reportWarning("voice.registration.failed", registrationException);
+        // >>> FORK KAR-878 — see ForkLogger.java
+        logger.error(registrationException, errorMessage);
         // <<< FORK
 
         final WritableMap payload = JSEventEmitter.constructJSMap(
@@ -63,7 +65,9 @@ public class RegistrationListenerProxy {
     return new UnregistrationListener() {
       @Override
       public void onUnregistered(String accessToken, String fcmToken) {
-        Log.d(TAG, "Successfully unregistered FCM");
+        // >>> FORK KAR-878 — see ForkLogger.java
+        logger.debug("Successfully unregistered FCM");
+        // <<< FORK
         final WritableMap payload = JSEventEmitter.constructJSMap(
           new Pair(CommonConstants.VoiceEventType, CommonConstants.VoiceEventUnregistered)
         );
@@ -78,9 +82,8 @@ public class RegistrationListenerProxy {
           registrationException.getErrorCode(),
           registrationException.getMessage()
         );
-        Log.e(TAG, errorMessage);
-        // >>> FORK KAR-878 — see ForkSentryReporter.java
-        ForkSentryReporter.reportWarning("voice.unregistration.failed", registrationException);
+        // >>> FORK KAR-878 — see ForkLogger.java
+        logger.error(registrationException, errorMessage);
         // <<< FORK
         final WritableMap payload = JSEventEmitter.constructJSMap(
           new Pair(CommonConstants.VoiceEventType, CommonConstants.VoiceEventError),

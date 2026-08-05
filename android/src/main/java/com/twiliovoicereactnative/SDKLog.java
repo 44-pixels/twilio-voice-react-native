@@ -1,47 +1,56 @@
 package com.twiliovoicereactnative;
 
-import android.util.Log;
-
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.PrintStream;
 import java.nio.charset.Charset;
 import java.util.Vector;
 
 class SDKLog extends OutputStream {
-  private final String logTag;
   private final Vector<Character> logInfoBuffer = new Vector<>();
+  // >>> FORK KAR-878 — see ForkLogger.java
+  private final ForkLogger forkLogger;
+  // <<< FORK
   public SDKLog(Class<?> clazz) {
-    logTag = clazz.getSimpleName();
+    // >>> FORK KAR-878 — see ForkLogger.java
+    forkLogger = new ForkLogger(clazz);
+    // <<< FORK
   }
 
   public void debug(final String message) {
-    if (BuildConfig.DEBUG) {
-      Log.d(logTag, message);
-    }
+    // >>> FORK KAR-878 — see ForkLogger.java
+    forkLogger.debug(message);
+    // <<< FORK
   }
 
   public void log(final String message) {
-    Log.i(logTag, message);
+    // >>> FORK KAR-878 — see ForkLogger.java
+    forkLogger.info(message);
+    // <<< FORK
   }
 
   public void warning(final String message) {
-    try {
-      write(message.getBytes());
-      flush();
-    } catch (Exception ignore) {}
+    // >>> FORK KAR-878 — see ForkLogger.java
+    forkLogger.warning(message);
+    // <<< FORK
   }
 
   public void error(final String message) {
-    Log.e(logTag, message);
+    // >>> FORK KAR-878 — see ForkLogger.java
+    forkLogger.error(message);
+    // <<< FORK
   }
 
   public void warning(final Exception e, final String message) {
-    PrintStream printStream = new PrintStream(this);
-    printStream.println(message);
-    e.printStackTrace(printStream);
-    printStream.flush();
+    // >>> FORK KAR-878 — see ForkLogger.java
+    forkLogger.warning(e, message);
+    // <<< FORK
   }
+
+  // >>> FORK KAR-878 — see ForkLogger.java
+  public void error(final Exception e, final String message) {
+    forkLogger.error(e, message);
+  }
+  // <<< FORK
 
   @Override
   public synchronized void write(int i) throws IOException {
@@ -69,6 +78,8 @@ class SDKLog extends OutputStream {
       output[i] = logInfoBuffer.get(i);
     }
     logInfoBuffer.clear();
-    Log.w(logTag, String.valueOf(output));
+    // >>> FORK KAR-878 — see ForkLogger.java
+    forkLogger.warning(String.valueOf(output));
+    // <<< FORK
   }
 }

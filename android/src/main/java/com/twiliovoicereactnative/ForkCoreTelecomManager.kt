@@ -291,11 +291,19 @@ internal object ForkCoreTelecomManager {
             }
           },
           onSetActive = {
+            ForkSentryReporter.recordAudioSession(
+              "voice.audio_session.telecom_activated",
+              callRecord.uuid,
+            )
             ForkTwilioVoiceThread.runBlocking {
               requireNotNull(callRecord.voiceCall).hold(false)
             }
           },
           onSetInactive = {
+            ForkSentryReporter.recordAudioSession(
+              "voice.audio_session.telecom_deactivated",
+              callRecord.uuid,
+            )
             ForkTwilioVoiceThread.runBlocking {
               requireNotNull(callRecord.voiceCall).hold(true)
             }
@@ -482,14 +490,29 @@ internal object ForkCoreTelecomManager {
         is CallControlResult.Error -> {
           ForkSentryReporter.reportError("voice.telecom.set_active_failed", null)
           logger.warning("Core Telecom setActive failed: ${result.errorCode}")
-          ForkTwilioVoiceThread.runBlocking { callRecord.voiceCall?.disconnect() }
+          disconnectTwilioCall(callRecord)
         }
       }
     } catch (error: Exception) {
       ForkSentryReporter.reportError("voice.telecom.set_active_failed", error)
       logger.warning(error, "Core Telecom setActive failed")
-      ForkTwilioVoiceThread.runBlocking { callRecord.voiceCall?.disconnect() }
+      disconnectTwilioCall(callRecord)
     }
+  }
+
+  private fun disconnectTwilioCall(callRecord: CallRecordDatabase.CallRecord) {
+    val call = callRecord.voiceCall ?: return
+    ForkSentryReporter.recordDisconnectBoundary(
+      "voice.call.disconnect_invocation.before",
+      callRecord.uuid,
+      call,
+    )
+    ForkTwilioVoiceThread.runBlocking { call.disconnect() }
+    ForkSentryReporter.recordDisconnectBoundary(
+      "voice.call.disconnect_invocation.after",
+      callRecord.uuid,
+      call,
+    )
   }
 
   private fun disconnect(callRecord: CallRecordDatabase.CallRecord, cause: Int) {

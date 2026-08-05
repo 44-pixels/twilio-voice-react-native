@@ -127,9 +127,22 @@ class CallModuleProxy {
     logger.debug(String.format(".disconnect(%s)", uuid));
 
     getCallRecord(uuid, promise, (callRecord) -> {
-      callRecord
-        .getVoiceCall()
-        .disconnect();
+      final Call call = callRecord.getVoiceCall();
+      // >>> FORK KAR-878 — see ForkSentryReporter.java
+      ForkSentryReporter.recordEndCallAction(
+        callRecord.getUuid(),
+        true,
+        call,
+        true,
+        VoiceApplicationProxy.getCallRecordDatabase().getCollection().size());
+      ForkSentryReporter.recordDisconnectBoundary(
+        "voice.call.disconnect_invocation.before", callRecord.getUuid(), call);
+      // <<< FORK
+      call.disconnect();
+      // >>> FORK KAR-878 — see ForkSentryReporter.java
+      ForkSentryReporter.recordDisconnectBoundary(
+        "voice.call.disconnect_invocation.after", callRecord.getUuid(), call);
+      // <<< FORK
       promise.resolve(null);
     });
   }

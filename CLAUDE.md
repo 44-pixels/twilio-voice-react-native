@@ -47,6 +47,15 @@ Fork-only files sit next to upstream files. Header:
 
 ObjC methods introduced by the fork: `fork_` prefix. Java helpers: plain class names.
 
+## Logging
+
+Route all production native logs through `ForkLogger`. Do not call Android `Log.*`, iOS `NSLog`, or `printStackTrace()` directly.
+
+- Fork-only Android code uses `ForkLogger`; upstream Android code may use `SDKLog`, which delegates to `ForkLogger`.
+- iOS code uses the matching `ForkLogger` severity method.
+- Debug/info logs create Sentry breadcrumbs. Warnings/errors also create Sentry events.
+- Keep secret redaction centralized in `ForkLogger` and limited to credentials, tokens, and explicit secrets.
+
 When upstream fixes a patch, drop the commit (sentinels + fork file together) and note the upstream SHA.
 
 ## Remotes

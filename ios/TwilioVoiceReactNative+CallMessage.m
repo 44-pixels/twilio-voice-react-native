@@ -9,7 +9,8 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
-// >>> FORK KAR-878 — see ForkSentryReporter.h
+// >>> FORK KAR-878 — see ForkLogger.h and ForkSentryReporter.h
+#import "ForkLogger.h"
 #import "ForkSentryReporter.h"
 // <<< FORK
 
@@ -49,7 +50,7 @@
     // >>> FORK KAR-878 — see ForkSentryReporter.h
     [ForkSentryReporter fork_reportWarning:@"voice.call_message.target_missing" cause:nil];
     // <<< FORK
-    NSLog(@"No match call or call invite for %@", callSid);
+    [ForkLogger fork_warning:@"No match call or call invite for %@", callSid];
 }
 
 - (void)messageSentForCallSid:(NSString *)callSid voiceEventSid:(NSString *)voiceEventSid {

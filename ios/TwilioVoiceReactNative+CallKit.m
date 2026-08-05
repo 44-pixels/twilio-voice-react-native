@@ -10,7 +10,8 @@
 
 #import "TwilioVoiceReactNative.h"
 #import "TwilioVoiceReactNativeConstants.h"
-// >>> FORK KAR-878 — see ForkSentryReporter.h
+// >>> FORK KAR-878 — see ForkLogger.h and ForkSentryReporter.h
+#import "ForkLogger.h"
 #import "ForkSentryReporter.h"
 // <<< FORK
 // >>> FORK KAR-787 — see ForkCallSounds.h
@@ -157,12 +158,12 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     } else {
         [self.callKitProvider reportNewIncomingCallWithUUID:callInvite.uuid update:callUpdate completion:^(NSError *error) {
             if (!error) {
-                NSLog(@"Incoming call successfully reported.");
+                [ForkLogger fork_info:@"Incoming call successfully reported."];
             } else {
                 // >>> FORK KAR-878 — see ForkSentryReporter.h
                 [ForkSentryReporter fork_reportError:@"voice.callkit.incoming_call_report_failed" cause:error];
                 // <<< FORK
-                NSLog(@"Failed to report incoming call: %@.", error);
+                [ForkLogger fork_errorWithCause:error format:@"Failed to report incoming call: %@.", error];
             }
         }];
     }
@@ -187,9 +188,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
             // >>> FORK KAR-878 — see ForkSentryReporter.h
             [ForkSentryReporter fork_reportError:@"voice.callkit.answer_transaction_failed" cause:error];
             // <<< FORK
-            NSLog(@"Failed to submit answer-call transaction request: %@", error);
+            [ForkLogger fork_errorWithCause:error format:@"Failed to submit answer-call transaction request: %@", error];
         } else {
-            NSLog(@"Answer-call transaction successfully done");
+            [ForkLogger fork_info:@"Answer-call transaction successfully done"];
         }
     }];
 }
@@ -203,9 +204,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
             // >>> FORK KAR-878 — see ForkSentryReporter.h
             [ForkSentryReporter fork_reportError:@"voice.callkit.end_transaction_failed" cause:error];
             // <<< FORK
-            NSLog(@"Failed to submit end-call transaction request: %@", error);
+            [ForkLogger fork_errorWithCause:error format:@"Failed to submit end-call transaction request: %@", error];
         } else {
-            NSLog(@"End-call transaction successfully done");
+            [ForkLogger fork_info:@"End-call transaction successfully done"];
         }
     }];
 }
@@ -234,9 +235,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
             // >>> FORK KAR-878 — see ForkSentryReporter.h
             [ForkSentryReporter fork_reportError:@"voice.callkit.start_transaction_failed" cause:error];
             // <<< FORK
-            NSLog(@"StartCallAction transaction request failed: %@", [error localizedDescription]);
+            [ForkLogger fork_errorWithCause:error format:@"StartCallAction transaction request failed: %@", [error localizedDescription]];
         } else {
-            NSLog(@"StartCallAction transaction request successful");
+            [ForkLogger fork_info:@"StartCallAction transaction request successful"];
 
             CXCallUpdate *callUpdate = [[CXCallUpdate alloc] init];
 
@@ -260,13 +261,16 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
         builder.uuid = uuid;
         builder.callMessageDelegate = self;
     }];
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_recordCallCreationForUUID:uuid];
+    // <<< FORK
     TVOCall *call = [TwilioVoiceSDK connectWithOptions:connectOptions delegate:self];
     if (call) {
         self.callMap[call.uuid.UUIDString] = call;
         [self resolvePromise:self.callPromiseResolver value:[self callInfo:call]];
     }
     // >>> FORK KAR-878 — see ForkSentryReporter.h
-    if (!call) [ForkSentryReporter fork_reportError:@"voice.call.connect_returned_nil" cause:nil];
+    [ForkSentryReporter fork_recordConnectResultForUUID:uuid call:call nativeCallMapSize:self.callMap.count];
     // <<< FORK
     self.callKitCompletionCallback = completionHandler;
 }
@@ -319,7 +323,8 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 
 - (void)providerDidReset:(CXProvider *)provider {
     // >>> FORK KAR-878 — see ForkSentryReporter.h
-    [ForkSentryReporter fork_addBreadcrumb:@"voice.callkit.provider_reset"];
+    [ForkSentryReporter fork_addBreadcrumb:@"voice.callkit.provider_reset"
+                                      data:@{@"native_call_map_size": @(self.callMap.count)}];
     // <<< FORK
     [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
 }
@@ -329,6 +334,10 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)provider:(CXProvider *)provider didActivateAudioSession:(AVAudioSession *)audioSession {
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_addBreadcrumb:@"voice.audio_session.activated"
+                                      data:@{@"native_call_map_size": @(self.callMap.count)}];
+    // <<< FORK
     [TwilioVoiceReactNative twilioAudioDevice].enabled = YES;
 
     // >>> FORK KAR-882 — ringback may have started before this session was active
@@ -340,16 +349,29 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)provider:(CXProvider *)provider didDeactivateAudioSession:(AVAudioSession *)audioSession {
+    // >>> FORK KAR-878 — see ForkSentryReporter.h
+    [ForkSentryReporter fork_addBreadcrumb:@"voice.audio_session.deactivated"
+                                      data:@{@"native_call_map_size": @(self.callMap.count)}];
+    // <<< FORK
     [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
 }
 
 - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)action {
     // >>> FORK KAR-878 — see ForkSentryReporter.h
-    [ForkSentryReporter fork_addBreadcrumb:@"voice.callkit.end_action"];
+    TVOCall *forkCall = self.callMap[action.callUUID.UUIDString];
+    [ForkSentryReporter fork_recordEndCallActionForUUID:action.callUUID
+                                                  call:forkCall
+                                     nativeCallMapSize:self.callMap.count];
     // <<< FORK
     if (self.callMap[action.callUUID.UUIDString]) {
         TVOCall *call = self.callMap[action.callUUID.UUIDString];
+        // >>> FORK KAR-878 — see ForkSentryReporter.h
+        [ForkSentryReporter fork_recordDisconnectBoundary:@"voice.call.disconnect_invocation.before" call:call];
+        // <<< FORK
         [call disconnect];
+        // >>> FORK KAR-878 — see ForkSentryReporter.h
+        [ForkSentryReporter fork_recordDisconnectBoundary:@"voice.call.disconnect_invocation.after" call:call];
+        // <<< FORK
     } else if (self.callInviteMap[action.callUUID.UUIDString]) {
         TVOCallInvite *callInvite = self.callInviteMap[action.callUUID.UUIDString];
         [callInvite reject];
@@ -380,10 +402,10 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     [self performVoiceCallWithUUID:action.callUUID client:nil completion:^(BOOL success, NSError *error) {
         __strong typeof(self) strongSelf = weakSelf;
         if (success) {
-            NSLog(@"performVoiceCallWithUUID successful");
+            [ForkLogger fork_info:@"performVoiceCallWithUUID successful"];
             [strongSelf.callKitProvider reportOutgoingCallWithUUID:action.callUUID connectedAtDate:[NSDate date]];
         } else {
-            NSLog(@"performVoiceCallWithUUID failed");
+            [ForkLogger fork_error:@"performVoiceCallWithUUID failed"];
         }
     }];
 
@@ -406,9 +428,9 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     // <<< FORK
     [self performAnswerVoiceCallWithUUID:action.callUUID completion:^(BOOL success) {
         if (success) {
-            NSLog(@"performAnswerVoiceCallWithUUID successful");
+            [ForkLogger fork_info:@"performAnswerVoiceCallWithUUID successful"];
         } else {
-            NSLog(@"performAnswerVoiceCallWithUUID failed");
+            [ForkLogger fork_error:@"performAnswerVoiceCallWithUUID failed"];
             // >>> FORK KAR-310
             forkAnswerFailed = YES;
             // <<< FORK
@@ -454,7 +476,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 
 - (void)callDidStartRinging:(TVOCall *)call {
     // >>> FORK KAR-878 — see ForkSentryReporter.h
-    [ForkSentryReporter fork_addBreadcrumb:@"voice.call.ringing"];
+    [ForkSentryReporter fork_recordLifecycle:@"voice.call.ringing" call:call cause:nil];
     // <<< FORK
     // >>> FORK KAR-882 — mark ringing so ringback can be restarted on audio-session activation.
     self.ringbackActive = YES;
@@ -468,7 +490,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 
 - (void)callDidConnect:(TVOCall *)call {
     // >>> FORK KAR-878 — see ForkSentryReporter.h
-    [ForkSentryReporter fork_addBreadcrumb:@"voice.call.connected"];
+    [ForkSentryReporter fork_recordLifecycle:@"voice.call.connected" call:call cause:nil];
     // <<< FORK
     self.callConnectMap[call.uuid.UUIDString] = [self getSimplifiedISO8601FormattedTimestamp:[NSDate date]];
 
@@ -489,7 +511,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 
 - (void)call:(TVOCall *)call didDisconnectWithError:(NSError *)error {
     // >>> FORK KAR-878 — see ForkSentryReporter.h
-    if (error) [ForkSentryReporter fork_reportError:@"voice.call.disconnected_with_error" cause:error];
+    [ForkSentryReporter fork_recordLifecycle:@"voice.call.disconnected" call:call cause:error];
     // <<< FORK
     // >>> FORK KAR-857 — see ForkCallIssueState.h
     [ForkCallIssueState fork_endedCall:call.uuid];
@@ -524,7 +546,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 
 - (void)call:(TVOCall *)call didFailToConnectWithError:(NSError *)error {
     // >>> FORK KAR-878 — see ForkSentryReporter.h
-    [ForkSentryReporter fork_reportError:@"voice.call.connect_failed" cause:error];
+    [ForkSentryReporter fork_recordLifecycle:@"voice.call.connect_failed" call:call cause:error];
     // <<< FORK
     // >>> FORK KAR-857 — see ForkCallIssueState.h
     [ForkCallIssueState fork_endedCall:call.uuid];
@@ -632,7 +654,7 @@ previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
         // >>> FORK KAR-878 — see ForkSentryReporter.h
         [ForkSentryReporter fork_addBreadcrumb:@"voice.audio.ringback_missing"];
         // <<< FORK
-        NSLog(@"Can't find sound file");
+        [ForkLogger fork_warning:@"Can't find sound file"];
         return;
     }
 
@@ -647,7 +669,7 @@ previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
         // >>> FORK KAR-878 — see ForkSentryReporter.h
         [ForkSentryReporter fork_reportError:@"voice.audio.ringback_initialization_failed" cause:error];
         // <<< FORK
-        NSLog(@"Failed to initialize audio player: %@", error);
+        [ForkLogger fork_errorWithCause:error format:@"Failed to initialize audio player: %@", error];
     } else {
         self.ringbackPlayer.delegate = self;
         self.ringbackPlayer.numberOfLoops = -1;
@@ -671,12 +693,12 @@ previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
 
 - (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
     if (flag) {
-        NSLog(@"Audio player finished playing successfully");
+        [ForkLogger fork_info:@"Audio player finished playing successfully"];
     } else {
         // >>> FORK KAR-878 — see ForkSentryReporter.h
         [ForkSentryReporter fork_reportWarning:@"voice.audio.playback_failed" cause:nil];
         // <<< FORK
-        NSLog(@"Audio player finished playing with some error");
+        [ForkLogger fork_warning:@"Audio player finished playing with some error"];
     }
 }
 
@@ -684,7 +706,7 @@ previousWarnings:(NSSet<NSNumber *> *)previousWarnings {
     // >>> FORK KAR-878 — see ForkSentryReporter.h
     [ForkSentryReporter fork_reportError:@"voice.audio.decode_failed" cause:error];
     // <<< FORK
-    NSLog(@"Decode error occurred: %@", error);
+    [ForkLogger fork_errorWithCause:error format:@"Decode error occurred: %@", error];
 }
 
 #pragma mark - Warning event conversion

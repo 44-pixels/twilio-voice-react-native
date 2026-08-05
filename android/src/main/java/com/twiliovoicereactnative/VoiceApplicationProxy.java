@@ -130,7 +130,9 @@ public class VoiceApplicationProxy {
     try {
       return Class.forName(Objects.requireNonNull(componentName).getClassName());
     } catch (ClassNotFoundException e) {
-      e.printStackTrace();
+      // >>> FORK KAR-878 — SDKLog delegates to ForkLogger.java
+      logger.error(e, "Main activity class not found");
+      // <<< FORK
       return null;
     }
   }

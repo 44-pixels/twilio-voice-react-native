@@ -49,7 +49,7 @@ class CallListenerProxy implements Call.Listener {
   public void onConnectFailure(@NonNull Call call, @NonNull CallException callException) {
     debug("onConnectFailure");
     // >>> FORK KAR-878 — see ForkSentryReporter.java
-    ForkSentryReporter.reportError("voice.call.connect_failed", callException);
+    ForkSentryReporter.recordLifecycle("voice.call.connect_failed", uuid, call, callException);
     // <<< FORK
 
     // >>> FORK KAR-857 — see ForkCallIssueState.java
@@ -85,7 +85,7 @@ class CallListenerProxy implements Call.Listener {
   public void onRinging(@NonNull Call call) {
     debug("onRinging");
     // >>> FORK KAR-878 — see ForkSentryReporter.java
-    ForkSentryReporter.addBreadcrumb("voice.call.ringing");
+    ForkSentryReporter.recordLifecycle("voice.call.ringing", uuid, call, null);
     // <<< FORK
 
     // find call record
@@ -123,7 +123,7 @@ class CallListenerProxy implements Call.Listener {
   public void onConnected(@NonNull Call call) {
     debug("onConnected");
     // >>> FORK KAR-878 — see ForkSentryReporter.java
-    ForkSentryReporter.addBreadcrumb("voice.call.connected");
+    ForkSentryReporter.recordLifecycle("voice.call.connected", uuid, call, null);
     // <<< FORK
 
     // find call record
@@ -199,7 +199,7 @@ class CallListenerProxy implements Call.Listener {
   public void onDisconnected(@NonNull Call call, @Nullable CallException callException) {
     debug("onDisconnected");
     // >>> FORK KAR-878 — see ForkSentryReporter.java
-    if (callException != null) ForkSentryReporter.reportError("voice.call.disconnected_with_error", callException);
+    ForkSentryReporter.recordLifecycle("voice.call.disconnected", uuid, call, callException);
     // <<< FORK
 
     // >>> FORK KAR-857 — see ForkCallIssueState.java
