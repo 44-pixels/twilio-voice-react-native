@@ -330,11 +330,22 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 
 - (void)provider:(CXProvider *)provider didActivateAudioSession:(AVAudioSession *)audioSession {
     [TwilioVoiceReactNative twilioAudioDevice].enabled = YES;
+    NSLog(@"KAR891DBG didActivateAudioSession");
 
     // >>> FORK KAR-882 — ringback may have started before this session was active
     // (played too quietly). Restart it now that the call-level session is up.
     if (self.ringbackActive) {
         [self playRingback];
+    }
+    // <<< FORK
+
+    // >>> FORK KAR-891 — the media path is now ready; accept the answer that was waiting
+    // for it (see -performAnswerCallAction:). This is the fix for cold-start answer drops.
+    NSUUID *pendingAccept = self.forkPendingAudioAcceptUuid;
+    if (pendingAccept != nil) {
+        self.forkPendingAudioAcceptUuid = nil;
+        NSLog(@"KAR891DBG audio session active -> accepting deferred answer uuid=%@", pendingAccept.UUIDString);
+        [self fork_performDeferredAcceptForUUID:pendingAccept];
     }
     // <<< FORK
 }
@@ -346,6 +357,13 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)action {
     // >>> FORK KAR-878 — see ForkSentryReporter.h
     [ForkSentryReporter fork_addBreadcrumb:@"voice.callkit.end_action"];
+    // <<< FORK
+    // >>> FORK KAR-891 — if the user ends before the audio-session-deferred accept fired,
+    // cancel it so we don't accept a call that was just ended.
+    if ([self.forkPendingAudioAcceptUuid isEqual:action.callUUID]) {
+        NSLog(@"KAR891DBG end action cancels pending deferred accept uuid=%@", action.callUUID.UUIDString);
+        self.forkPendingAudioAcceptUuid = nil;
+    }
     // <<< FORK
     if (self.callMap[action.callUUID.UUIDString]) {
         TVOCall *call = self.callMap[action.callUUID.UUIDString];
@@ -422,25 +440,47 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
     [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
     [TwilioVoiceReactNative twilioAudioDevice].block();
 
-    // >>> FORK KAR-310 — capture failure to propagate to CXAction.
-    // Assumes upstream completion is invoked synchronously; verify on SDK bump.
-    __block BOOL forkAnswerFailed = NO;
-    // <<< FORK
-    [self performAnswerVoiceCallWithUUID:action.callUUID completion:^(BOOL success) {
-        if (success) {
-            NSLog(@"performAnswerVoiceCallWithUUID successful");
-        } else {
-            NSLog(@"performAnswerVoiceCallWithUUID failed");
-            // >>> FORK KAR-310
-            forkAnswerFailed = YES;
-            // <<< FORK
-        }
-    }];
+    // >>> FORK KAR-891 — defer the accept until CallKit activates the audio session.
+    // On cold start the call is answerable before the media path is ready (KAR-869 reports
+    // CallKit synchronously). Accepting immediately lets the not-yet-established call be
+    // torn down — the caller sees Decline / Request Terminated and the backend logs
+    // no_answer / "rang off before connecting". Instead, fulfill now and accept in
+    // -didActivateAudioSession: once the session is up. A fallback timer still accepts if
+    // the session never activates, so the call can't hang forever.
+    NSLog(@"KAR891DBG performAnswerCallAction hasInvite=1 -> deferring accept until audio session active, uuid=%@", action.callUUID.UUIDString);
+    self.forkPendingAudioAcceptUuid = action.callUUID;
+    [action fulfill];
 
-    // >>> FORK KAR-310 — was: [action fulfill];
-    if (forkAnswerFailed) { [action fail]; } else { [action fulfill]; }
+    NSUUID *forkAcceptUuid = action.callUUID;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if ([self.forkPendingAudioAcceptUuid isEqual:forkAcceptUuid]) {
+            NSLog(@"KAR891DBG audio session never activated within 2s — accepting anyway uuid=%@", forkAcceptUuid.UUIDString);
+            [ForkSentryReporter fork_reportWarning:@"voice.callkit.audio_session_activation_timed_out" cause:nil];
+            self.forkPendingAudioAcceptUuid = nil;
+            [self fork_performDeferredAcceptForUUID:forkAcceptUuid];
+        }
+    });
     // <<< FORK
 }
+
+// >>> FORK KAR-891 — perform the actual accept for a call that was answered from CallKit.
+// Kept separate so both the audio-session-deferred path (-didActivateAudioSession:) and
+// the invite-not-yet-bound path (-callInviteReceived:) go through one place.
+- (void)fork_performDeferredAcceptForUUID:(NSUUID *)uuid {
+    if (self.callInviteMap[uuid.UUIDString] == nil) {
+        NSLog(@"KAR891DBG fork_performDeferredAccept: no invite for uuid=%@ (cancelled?)", uuid.UUIDString);
+        return;
+    }
+    NSLog(@"KAR891DBG fork_performDeferredAccept -> accepting uuid=%@", uuid.UUIDString);
+    [self performAnswerVoiceCallWithUUID:uuid completion:^(BOOL success) {
+        NSLog(@"KAR891DBG accept result success=%d uuid=%@", success, uuid.UUIDString);
+        if (!success) {
+            [ForkSentryReporter fork_reportError:@"voice.call.deferred_accept_failed" cause:nil];
+            [self.callKitProvider reportCallWithUUID:uuid endedAtDate:[NSDate date] reason:CXCallEndedReasonFailed];
+        }
+    }];
+}
+// <<< FORK
 
 - (void)provider:(CXProvider *)provider performSetHeldCallAction:(CXSetHeldCallAction *)action {
     if (self.callMap[action.callUUID.UUIDString]) {
@@ -489,6 +529,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)callDidConnect:(TVOCall *)call {
+    NSLog(@"KAR891DBG callDidConnect uuid=%@", call.uuid.UUIDString);
     // >>> FORK KAR-878 — see ForkSentryReporter.h
     [ForkSentryReporter fork_addBreadcrumb:@"voice.call.connected"];
     // <<< FORK
@@ -510,6 +551,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)call:(TVOCall *)call didDisconnectWithError:(NSError *)error {
+    NSLog(@"KAR891DBG didDisconnectWithError uuid=%@ error=%@ connectedBefore=%d", call.uuid.UUIDString, error, (self.callConnectMap[call.uuid.UUIDString] != nil));
     // >>> FORK KAR-878 — see ForkSentryReporter.h
     if (error) [ForkSentryReporter fork_reportError:@"voice.call.disconnected_with_error" cause:error];
     // <<< FORK
@@ -545,6 +587,7 @@ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native"
 }
 
 - (void)call:(TVOCall *)call didFailToConnectWithError:(NSError *)error {
+    NSLog(@"KAR891DBG didFailToConnectWithError uuid=%@ error=%@", call.uuid.UUIDString, error);
     // >>> FORK KAR-878 — see ForkSentryReporter.h
     [ForkSentryReporter fork_reportError:@"voice.call.connect_failed" cause:error];
     // <<< FORK

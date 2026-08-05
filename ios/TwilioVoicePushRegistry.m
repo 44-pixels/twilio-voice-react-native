@@ -64,7 +64,8 @@ withCompletionHandler:(void (^)(void))completion {
         // <<< FORK
         // >>> FORK KAR-869 — report to CallKit synchronously
         // so iOS doesn't kill the app for an unhandled VoIP push on cold start.
-        [[ForkVoipPushReporter sharedReporter] reportIncomingCallForPushPayload:payload.dictionaryPayload];
+        NSUUID *forkReserved = [[ForkVoipPushReporter sharedReporter] reportIncomingCallForPushPayload:payload.dictionaryPayload];
+        NSLog(@"KAR891DBG didReceiveIncomingPush reservedUuid=%@", forkReserved.UUIDString);
         // <<< FORK
 
         [[NSNotificationCenter defaultCenter] postNotificationName:kTwilioVoicePushRegistryNotification

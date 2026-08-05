@@ -32,6 +32,7 @@
     // >>> FORK KAR-869 — key by the effective UUID (the one reported to CallKit) so
     // answer/end actions and JS resolve to this invite.
     NSUUID *effectiveUuid = [self effectiveUUIDForCallInvite:callInvite];
+    NSLog(@"KAR891DBG callInviteReceived callSid=%@ effectiveUuid=%@ inviteUuid=%@", callInvite.callSid, effectiveUuid.UUIDString, callInvite.uuid.UUIDString);
 
     // >>> FORK KAR-891 — the user ended the CallKit call during cold start, before this
     // invite arrived. Reject it instead of binding/ringing.
@@ -59,6 +60,7 @@
     // event above is sent first so InboundCallsService attaches its Accepted listener
     // before the accept below fires it.
     if ([[ForkVoipPushReporter sharedReporter] consumePendingAnswerForUUID:effectiveUuid]) {
+        NSLog(@"KAR891DBG callInviteReceived -> invite arrived for an already-answered call, accepting now uuid=%@", effectiveUuid.UUIDString);
         [ForkSentryReporter fork_addBreadcrumb:@"voice.call_invite.deferred_answer_accepted"];
         [self performAnswerVoiceCallWithUUID:effectiveUuid completion:^(BOOL success) {
             if (!success) {

@@ -91,6 +91,12 @@ FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallI
 // answered from the CallKit UI during cold start, before the invite arrived.
 - (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
                             completion:(void(^)(BOOL success))completionHandler;
+
+// >>> FORK KAR-891 — UUID of an answered inbound call whose accept is waiting for CallKit
+// to activate the audio session (see -performAnswerCallAction: / -didActivateAudioSession:).
+// On cold start the call is answerable before the media path is ready; accepting into a
+// not-ready session lets the call be torn down (caller Decline, backend no_answer).
+@property (nonatomic, strong, nullable) NSUUID *forkPendingAudioAcceptUuid;
 // <<< FORK
 
 @end
