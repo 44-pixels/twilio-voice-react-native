@@ -123,7 +123,6 @@ final class ForkCallInviteRejection {
     VoiceApplicationProxy.getCallRecordDatabase().remove(callRecord);
     VoiceService.removeForegroundNotificationIfRunning();
     VoiceApplicationProxy.getMediaPlayerManager().stop();
-    ForkCallLifecycleCoordinator.deactivateFallbackAudio(callRecord);
     ForkInvitePayloadStore.clear(callRecord.getCallSid());
     ForkNotificationIdentity.cancelForCallSid(context, callRecord.getCallSid());
     ForkVoiceMessageGuard.markSettled(callRecord.getCallSid());

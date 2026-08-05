@@ -1,7 +1,7 @@
 // FORK — KAR-443
 // Owns: Java-facing boundary for Android Telecom call lifecycle mirroring via
 // Jetpack Core-Telecom. Keeps fork Java code away from Core-Telecom/Kotlin API
-// details and centralizes fallback dispatch into VoiceService.
+// details and exposes Telecom-owned endpoint state to the React Native API.
 // Hooks into: ForkCallLifecycleCoordinator and app.plugin.js.
 // Re-check on SDK bump: Core-Telecom mirroring lifecycle and VoiceService action names.
 package com.twiliovoicereactnative;
@@ -12,7 +12,7 @@ import android.content.Intent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.twilio.audioswitch.AudioDevice;
+import com.facebook.react.bridge.WritableMap;
 import com.twilio.voice.CallException;
 
 final class ForkTelecomManager {
@@ -55,6 +55,10 @@ final class ForkTelecomManager {
     ForkCoreTelecomManager.cancelIncomingCall(callSid);
   }
 
+  static void cleanupTerminalCall(@NonNull java.util.UUID uuid) {
+    ForkCoreTelecomManager.cleanupTerminalCall(uuid);
+  }
+
   static void markAnswered(@NonNull CallRecordDatabase.CallRecord callRecord) {
     ForkCoreTelecomManager.markAnswered(callRecord);
   }
@@ -72,9 +76,20 @@ final class ForkTelecomManager {
     ForkCoreTelecomManager.markDisconnected(callRecord, callException);
   }
 
-  static boolean selectAudioDevice(@NonNull AudioDevice audioDevice,
-                                   @NonNull ForkTelecomRouteCallback callback) {
-    return ForkCoreTelecomManager.selectAudioDevice(audioDevice, callback);
+  static void markDisconnected(@NonNull CallRecordDatabase.CallRecord callRecord,
+                               @Nullable CallException callException,
+                               @NonNull Runnable onAudioReleased) {
+    ForkCoreTelecomManager.markDisconnected(callRecord, callException, onAudioReleased);
+  }
+
+  @NonNull
+  static WritableMap getAudioDevices() {
+    return ForkCoreTelecomManager.audioDeviceInfo();
+  }
+
+  static int selectAudioDevice(@NonNull String endpointUuid,
+                               @NonNull ForkTelecomRouteCallback callback) {
+    return ForkCoreTelecomManager.selectAudioDevice(endpointUuid, callback);
   }
 
   static void sendVoiceServiceAction(@NonNull Context context,

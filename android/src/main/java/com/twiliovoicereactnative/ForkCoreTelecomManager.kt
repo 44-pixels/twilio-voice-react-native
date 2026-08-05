@@ -17,17 +17,16 @@ import androidx.core.telecom.CallControlResult
 import androidx.core.telecom.CallControlScope
 import androidx.core.telecom.CallEndpointCompat
 import androidx.core.telecom.CallsManager
-import com.twilio.audioswitch.AudioDevice
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.WritableMap
 import com.twilio.voice.CallException
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
 fun interface ForkTelecomRouteCallback {
@@ -44,8 +43,9 @@ internal object ForkCoreTelecomManager {
   const val ANSWER_PROCEED = 0
   const val ANSWER_PENDING = 1
 
-  private const val ENDPOINT_WAIT_TIMEOUT_MILLIS = 1_500L
-  private const val CALL_ENDED_WAIT_TIMEOUT_MILLIS = 4_000L
+  const val ROUTE_NOT_ACTIVE = 0
+  const val ROUTE_PENDING = 1
+  const val ROUTE_UNKNOWN = 2
 
   private val logger = SDKLog(ForkCoreTelecomManager::class.java)
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -62,7 +62,10 @@ internal object ForkCoreTelecomManager {
   private var appAnswerInFlight = false
   private var answerPermitUuid: UUID? = null
   private var telecomDisconnectUuid: UUID? = null
-  private var telecomDisconnectFinished: CompletableDeferred<Unit>? = null
+  private var audioReleaseUuid: UUID? = null
+  private var audioReleaseCallback: Runnable? = null
+  private var availableEndpoints: List<CallEndpointCompat> = emptyList()
+  private var currentEndpoint: CallEndpointCompat? = null
 
   @JvmStatic
   fun isAvailable(context: Context): Boolean =
@@ -136,6 +139,11 @@ internal object ForkCoreTelecomManager {
   }
 
   @JvmStatic
+  fun cleanupTerminalCall(uuid: UUID) {
+    cancelRegistration(uuid, terminal = true)
+  }
+
+  @JvmStatic
   fun markAnswered(callRecord: CallRecordDatabase.CallRecord) {
     // Answer authorization is completed before CallInvite.accept().
   }
@@ -158,7 +166,11 @@ internal object ForkCoreTelecomManager {
     val fromTelecom = synchronized(stateLock) {
       telecomDisconnectUuid == callRecord.uuid
     }
-    if (!fromTelecom) disconnect(callRecord, DisconnectCause.REJECTED)
+    if (fromTelecom) {
+      cancelRegistration(callRecord.uuid, terminal = true)
+    } else {
+      disconnect(callRecord, DisconnectCause.REJECTED)
+    }
   }
 
   @JvmStatic
@@ -166,18 +178,31 @@ internal object ForkCoreTelecomManager {
     callRecord: CallRecordDatabase.CallRecord,
     callException: CallException?,
   ) {
-    val telecomCompletion = synchronized(stateLock) {
-      if (telecomDisconnectUuid == callRecord.uuid) telecomDisconnectFinished else null
+    markDisconnected(callRecord, callException, null)
+  }
+
+  @JvmStatic
+  fun markDisconnected(
+    callRecord: CallRecordDatabase.CallRecord,
+    callException: CallException?,
+    onAudioReleased: Runnable?,
+  ) {
+    val disconnectFromApp = synchronized(stateLock) {
+      if (!ownsTelecomState(callRecord.uuid)) return@synchronized null
+      if (onAudioReleased != null) {
+        audioReleaseUuid = callRecord.uuid
+        audioReleaseCallback = onAudioReleased
+      }
+      telecomDisconnectUuid != callRecord.uuid
     }
-    if (telecomCompletion != null) {
-      telecomCompletion.complete(Unit)
+    if (disconnectFromApp == null) {
+      onAudioReleased?.run()
       return
     }
-
-    val disconnectedByTelecom = synchronized(stateLock) {
-      telecomDisconnectUuid == callRecord.uuid
+    if (!disconnectFromApp) {
+      cancelRegistration(callRecord.uuid, terminal = true)
+      return
     }
-    if (disconnectedByTelecom) return
 
     disconnect(
       callRecord,
@@ -186,34 +211,25 @@ internal object ForkCoreTelecomManager {
   }
 
   @JvmStatic
+  fun audioDeviceInfo(): WritableMap = synchronized(stateLock) {
+    serializeAudioDeviceInfo(availableEndpoints, currentEndpoint)
+  }
+
+  @JvmStatic
   fun selectAudioDevice(
-    audioDevice: AudioDevice,
+    endpointUuid: String,
     callback: ForkTelecomRouteCallback,
-  ): Boolean {
-    val endpointType = endpointTypeFor(audioDevice) ?: return false
+  ): Int {
     val routeState = synchronized(stateLock) {
-      Pair(registeringUuid != null || managedRecord != null, control)
+      Triple(registeringUuid != null || managedRecord != null, control, availableEndpoints)
     }
-    if (!routeState.first) return false
-    val callControl = routeState.second
-    if (callControl == null) {
-      callback.onComplete(false)
-      return true
-    }
+    if (!routeState.first) return ROUTE_NOT_ACTIVE
+    val callControl = routeState.second ?: return ROUTE_NOT_ACTIVE
+    val endpoint = routeState.third.firstOrNull { endpointUuid(it) == endpointUuid }
+      ?: return ROUTE_UNKNOWN
 
     scope.launch {
       try {
-        val endpoints = withTimeoutOrNull(ENDPOINT_WAIT_TIMEOUT_MILLIS) {
-          callControl.availableEndpoints.first()
-        }
-        val endpoint = endpoints?.firstOrNull { it.type == endpointType }
-        if (endpoint == null) {
-          ForkSentryReporter.reportWarning("voice.telecom.audio_endpoint_unavailable", null)
-          logger.warning("Core Telecom endpoint unavailable for type $endpointType")
-          callback.onComplete(false)
-          return@launch
-        }
-
         when (val result = callControl.requestEndpointChange(endpoint)) {
           is CallControlResult.Success -> callback.onComplete(true)
           is CallControlResult.Error -> {
@@ -229,7 +245,7 @@ internal object ForkCoreTelecomManager {
       }
     }
 
-    return true
+    return ROUTE_PENDING
   }
 
   private fun reportCall(
@@ -237,9 +253,26 @@ internal object ForkCoreTelecomManager {
     callRecord: CallRecordDatabase.CallRecord,
     callDirection: CallRecordDatabase.CallRecord.Direction,
   ) {
-    if (!isAvailable(context)) return
+    if (!ForkSingleCallSession.isOwner(callRecord.uuid) ||
+      ForkCallLifecycleCoordinator.twilioState(callRecord.uuid)?.isTerminal() == true
+    ) return
+
+    if (!isAvailable(context)) {
+      logger.warning("Core Telecom is unavailable; refusing unmanaged call")
+      ForkTwilioVoiceThread.run {
+        if (callRecord.voiceCall == null) {
+          VoiceApplicationProxy.getVoiceServiceApi().rejectCall(callRecord)
+        } else {
+          disconnectTwilioCall(callRecord)
+        }
+      }
+      return
+    }
 
     synchronized(stateLock) {
+      if (!ForkSingleCallSession.isOwner(callRecord.uuid) ||
+        ForkCallLifecycleCoordinator.twilioState(callRecord.uuid)?.isTerminal() == true
+      ) return
       if (registeringUuid == callRecord.uuid || managedRecord?.uuid == callRecord.uuid) return
       if (registeringUuid != null || managedRecord != null) {
         logger.warning("Core Telecom already owns another call")
@@ -252,7 +285,6 @@ internal object ForkCoreTelecomManager {
 
     val appContext = context.applicationContext
     val job = scope.launch(start = CoroutineStart.LAZY) {
-      var preserveFallbackOwner = false
       try {
         val callsManager = CallsManager(appContext)
         callsManager.registerAppWithTelecom(CallsManager.CAPABILITY_BASELINE)
@@ -272,22 +304,14 @@ internal object ForkCoreTelecomManager {
             }
           },
           onDisconnect = {
-            val waitsForCallEndedSound = ForkCallRecordSnapshot.capture(callRecord).hasCall
-            val callEnded = if (waitsForCallEndedSound) CompletableDeferred<Unit>() else null
-            synchronized(stateLock) {
-              telecomDisconnectUuid = callRecord.uuid
-              telecomDisconnectFinished = callEnded
-            }
-            ForkTwilioVoiceThread.runBlocking {
-              val api = VoiceApplicationProxy.getVoiceServiceApi()
-              if (callRecord.voiceCall == null) api.rejectCall(callRecord) else api.disconnect(callRecord)
-            }
-            if (callEnded != null) {
-              val didFinish = withTimeoutOrNull(CALL_ENDED_WAIT_TIMEOUT_MILLIS) {
-                callEnded.await()
-                true
-              } ?: false
-              if (!didFinish) logger.warning("Timed out waiting for call-ended sound")
+            synchronized(stateLock) { telecomDisconnectUuid = callRecord.uuid }
+            try {
+              ForkTwilioVoiceThread.runBlocking {
+                val api = VoiceApplicationProxy.getVoiceServiceApi()
+                if (callRecord.voiceCall == null) api.rejectCall(callRecord) else api.disconnect(callRecord)
+              }
+            } finally {
+              cancelRegistration(callRecord.uuid)
             }
           },
           onSetActive = {
@@ -339,6 +363,16 @@ internal object ForkCoreTelecomManager {
               }
             }
           }
+          launch {
+            availableEndpoints.collect { endpoints ->
+              updateAvailableEndpoints(callRecord.uuid, endpoints)
+            }
+          }
+          launch {
+            currentCallEndpoint.collect { endpoint ->
+              updateCurrentEndpoint(callRecord.uuid, endpoint)
+            }
+          }
           when {
             pendingActions.disconnectCause != null -> scope.launch {
               disconnectFromApp(callRecord, callControl, pendingActions.disconnectCause)
@@ -352,37 +386,43 @@ internal object ForkCoreTelecomManager {
             }
           }
         }
+      } catch (cancellation: CancellationException) {
+        throw cancellation
       } catch (error: Exception) {
         ForkSentryReporter.reportError("voice.telecom.registration_failed", error)
         logger.warning(error, "Core Telecom call registration failed")
-        val fallbackState = synchronized(stateLock) {
+        val failedState = synchronized(stateLock) {
           val matches = ownsTelecomState(callRecord.uuid)
-          val resumeAnswer = matches && pendingAppAnswer && isAnswerable(callRecord)
-          val liveIncoming = matches && isAnswerable(callRecord)
-          val recordSnapshot = ForkCallRecordSnapshot.capture(callRecord)
-          val liveOutgoing = matches &&
-            callDirection == CallRecordDatabase.CallRecord.Direction.OUTGOING &&
-            recordSnapshot.liveCall
+          val answerable = matches && isAnswerable(callRecord)
+          val hasCall = matches && ForkCallRecordSnapshot.capture(callRecord).hasCall
           clearTelecomState(callRecord.uuid)
-          Pair(resumeAnswer, liveIncoming || liveOutgoing)
+          Pair(answerable, hasCall)
         }
-        preserveFallbackOwner = fallbackState.second
-        if (fallbackState.first) {
-          ForkTwilioVoiceThread.runBlocking {
-            VoiceApplicationProxy.getVoiceServiceApi().acceptCall(callRecord)
+        ForkTwilioVoiceThread.runBlocking {
+          when {
+            failedState.first -> VoiceApplicationProxy.getVoiceServiceApi().rejectCall(callRecord)
+            failedState.second -> disconnectTwilioCall(callRecord)
           }
-        } else if (fallbackState.second && ForkCallRecordSnapshot.capture(callRecord).hasCall) {
-          VoiceApplicationProxy.getAudioSwitchManager().getAudioSwitch().activate()
         }
       } finally {
-        synchronized(stateLock) { clearTelecomState(callRecord.uuid) }
-        if (!preserveFallbackOwner) releaseOwnerIfSettled(callRecord)
+        val releaseCallback = synchronized(stateLock) {
+          clearTelecomState(callRecord.uuid)
+          takeAudioReleaseCallback(callRecord.uuid)
+        }
+        emitAudioDevicesUpdated()
+        releaseCallback?.run()
+        releaseOwnerIfSettled(callRecord)
       }
     }
-    synchronized(stateLock) {
-      if (managedRecord?.uuid == callRecord.uuid) registrationJob = job
+    val started = synchronized(stateLock) {
+      if (managedRecord?.uuid != callRecord.uuid) {
+        false
+      } else {
+        registrationJob = job
+        job.start()
+      }
     }
-    job.start()
+    if (!started) job.cancel()
   }
 
   private fun callbackHandle(
@@ -534,36 +574,119 @@ internal object ForkCoreTelecomManager {
     try {
       when (val result = callControl.disconnect(DisconnectCause(cause))) {
         is CallControlResult.Success -> {
-          synchronized(stateLock) { clearTelecomState(callRecord.uuid) }
-          releaseOwnerIfSettled(callRecord)
+          // addCall's endpoint collectors remain active after Telecom ends the call.
+          // Clear the completed session and cancel their owning job.
+          cancelRegistration(callRecord.uuid, terminal = true)
         }
         is CallControlResult.Error -> {
           ForkSentryReporter.reportError("voice.telecom.disconnect_failed", null)
           logger.warning("Core Telecom disconnect failed: ${result.errorCode}")
-          cancelRegistration(callRecord.uuid)
+          cancelRegistration(callRecord.uuid, terminal = true)
         }
       }
     } catch (error: Exception) {
       ForkSentryReporter.reportError("voice.telecom.disconnect_failed", error)
       logger.warning(error, "Core Telecom disconnect failed")
-      cancelRegistration(callRecord.uuid)
+      cancelRegistration(callRecord.uuid, terminal = true)
     }
   }
 
-  private fun cancelRegistration(uuid: UUID) {
+  private fun cancelRegistration(uuid: UUID, terminal: Boolean = false) {
+    var releaseCallback: Runnable? = null
     val job = synchronized(stateLock) {
       if (!ownsTelecomState(uuid)) return
-      registrationJob
+      val currentJob = registrationJob
+      clearTelecomState(uuid)
+      releaseCallback = takeAudioReleaseCallback(uuid)
+      currentJob
     }
+
+    emitAudioDevicesUpdated()
+    releaseCallback?.run()
+    if (terminal) ForkSingleCallSession.releaseIfOwner(uuid)
     job?.cancel()
   }
 
-  private fun endpointTypeFor(audioDevice: AudioDevice): Int? = when (audioDevice) {
-    is AudioDevice.Speakerphone -> CallEndpointCompat.TYPE_SPEAKER
-    is AudioDevice.Earpiece -> CallEndpointCompat.TYPE_EARPIECE
-    is AudioDevice.BluetoothHeadset -> CallEndpointCompat.TYPE_BLUETOOTH
-    is AudioDevice.WiredHeadset -> CallEndpointCompat.TYPE_WIRED_HEADSET
+  private fun updateAvailableEndpoints(
+    uuid: UUID,
+    endpoints: List<CallEndpointCompat>,
+  ) {
+    val supportedEndpoints = endpoints.filter { endpointType(it) != null }
+    val changed = synchronized(stateLock) {
+      if (managedRecord?.uuid != uuid || availableEndpoints == supportedEndpoints) {
+        false
+      } else {
+        availableEndpoints = supportedEndpoints
+        true
+      }
+    }
+    if (changed) emitAudioDevicesUpdated()
+  }
+
+  private fun updateCurrentEndpoint(uuid: UUID, endpoint: CallEndpointCompat) {
+    val supportedEndpoint = endpoint.takeIf { endpointType(it) != null }
+    val changed = synchronized(stateLock) {
+      if (managedRecord?.uuid != uuid || currentEndpoint == supportedEndpoint) {
+        false
+      } else {
+        currentEndpoint = supportedEndpoint
+        true
+      }
+    }
+    if (changed) emitAudioDevicesUpdated()
+  }
+
+  private fun emitAudioDevicesUpdated() {
+    val audioDeviceInfo = audioDeviceInfo()
+    audioDeviceInfo.putString(
+      CommonConstants.VoiceEventType,
+      CommonConstants.VoiceEventAudioDevicesUpdated,
+    )
+    VoiceApplicationProxy.getJSEventEmitter().sendEvent(
+      CommonConstants.ScopeVoice,
+      audioDeviceInfo,
+    )
+  }
+
+  private fun serializeAudioDeviceInfo(
+    endpoints: List<CallEndpointCompat>,
+    selectedEndpoint: CallEndpointCompat?,
+  ): WritableMap {
+    val serializedEndpoints = Arguments.createArray()
+    endpoints.forEach { serializedEndpoints.pushMap(serializeEndpoint(it)) }
+
+    return Arguments.createMap().apply {
+      putArray(CommonConstants.AudioDeviceKeyAudioDevices, serializedEndpoints)
+      selectedEndpoint?.let {
+        putMap(CommonConstants.AudioDeviceKeySelectedDevice, serializeEndpoint(it))
+      }
+    }
+  }
+
+  private fun serializeEndpoint(endpoint: CallEndpointCompat): WritableMap =
+    Arguments.createMap().apply {
+      putString(CommonConstants.AudioDeviceKeyUuid, endpointUuid(endpoint))
+      putString(CommonConstants.AudioDeviceKeyName, endpoint.name.toString())
+      putString(CommonConstants.AudioDeviceKeyType, requireNotNull(endpointType(endpoint)))
+    }
+
+  private fun endpointUuid(endpoint: CallEndpointCompat): String =
+    endpoint.identifier.uuid.toString()
+
+  private fun endpointType(endpoint: CallEndpointCompat): String? = when (endpoint.type) {
+    CallEndpointCompat.TYPE_SPEAKER -> CommonConstants.AudioDeviceKeySpeaker
+    CallEndpointCompat.TYPE_BLUETOOTH -> CommonConstants.AudioDeviceKeyBluetooth
+    CallEndpointCompat.TYPE_EARPIECE,
+    CallEndpointCompat.TYPE_WIRED_HEADSET -> CommonConstants.AudioDeviceKeyEarpiece
     else -> null
+  }
+
+  private fun takeAudioReleaseCallback(uuid: UUID): Runnable? {
+    if (audioReleaseUuid != uuid) return null
+    val callback = audioReleaseCallback
+    audioReleaseUuid = null
+    audioReleaseCallback = null
+    return callback
   }
 
   private fun hasLiveTwilioState(
@@ -571,7 +694,6 @@ internal object ForkCoreTelecomManager {
   ): Boolean = ForkCallRecordSnapshot.capture(callRecord).hasLiveTwilioState()
 
   private fun releaseOwnerIfSettled(callRecord: CallRecordDatabase.CallRecord) {
-    if (ForkSingleCallSession.hasSetupReservation(callRecord.uuid)) return
     if (!hasLiveTwilioState(callRecord)) {
       ForkSingleCallSession.releaseIfOwner(callRecord.uuid)
     }
@@ -600,8 +722,8 @@ internal object ForkCoreTelecomManager {
     appAnswerInFlight = false
     answerPermitUuid = null
     telecomDisconnectUuid = null
-    telecomDisconnectFinished?.complete(Unit)
-    telecomDisconnectFinished = null
+    availableEndpoints = emptyList()
+    currentEndpoint = null
   }
 
   private fun normalizedIncomingAddress(callRecord: CallRecordDatabase.CallRecord): String {

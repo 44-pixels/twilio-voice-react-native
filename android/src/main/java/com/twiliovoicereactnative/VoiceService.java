@@ -257,7 +257,7 @@ public class VoiceService extends Service {
 
 
     // play ringer sound
-    // >>> FORK KAR-373 — defer audioSwitch.activate() to acceptCall so MODE_IN_COMMUNICATION isn't set during ring
+    // >>> FORK KAR-373 / KAR-443 — ringing stays outside Telecom call-audio activation
     VoiceApplicationProxy.getMediaPlayerManager().play(MediaPlayerManager.SoundTable.INCOMING);
     // <<< FORK
 
@@ -287,8 +287,7 @@ public class VoiceService extends Service {
 
       // stop ringer sound
       VoiceApplicationProxy.getMediaPlayerManager().stop();
-      // >>> FORK KAR-443 — AudioSwitch is fallback-only
-      ForkCallLifecycleCoordinator.deactivateFallbackAudio(callRecord);
+      // >>> FORK KAR-443 — fail the pending answer before rejecting it
       callRecord.failCallAcceptedPromise("Microphone permission is not granted.");
       // <<< FORK
 
@@ -340,10 +339,6 @@ public class VoiceService extends Service {
 
     // stop ringer sound
     VoiceApplicationProxy.getMediaPlayerManager().stop();
-
-    // >>> FORK KAR-373 / KAR-443 — AudioSwitch is fallback-only
-    ForkCallLifecycleCoordinator.activateFallbackAudio(callRecord);
-    // <<< FORK
 
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java (foreground-accept path; intent-gated path in VoiceActivityProxy doesn't fire here)
     ForkLockScreenFlags.applyForActiveCall();
@@ -426,10 +421,6 @@ public class VoiceService extends Service {
 
     // stop ringer sound
     VoiceApplicationProxy.getMediaPlayerManager().stop();
-    // >>> FORK KAR-443 — AudioSwitch is fallback-only
-    ForkCallLifecycleCoordinator.deactivateFallbackAudio(callRecord);
-    // <<< FORK
-
     // >>> FORK KAR-448 — see ForkLockScreenFlags.java
     ForkLockScreenFlags.clearForEndedCall();
     // <<< FORK

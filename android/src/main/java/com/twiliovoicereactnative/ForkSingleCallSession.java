@@ -17,6 +17,7 @@ import java.util.UUID;
 final class ForkSingleCallSession {
   @Nullable private static UUID owner;
   private static int setupReservations;
+  private static boolean releasePending;
 
   private ForkSingleCallSession() {}
 
@@ -28,6 +29,7 @@ final class ForkSingleCallSession {
           if (owner != null) continue;
           owner = uuid;
           setupReservations = 1;
+          releasePending = false;
           return true;
         }
       }
@@ -52,9 +54,17 @@ final class ForkSingleCallSession {
     return true;
   }
 
-  static synchronized void completeSetup(@NonNull UUID uuid) {
-    if (owner == null || !owner.equals(uuid) || setupReservations == 0) return;
-    setupReservations--;
+  static void completeSetup(@NonNull UUID uuid) {
+    boolean shouldRelease;
+    synchronized (ForkSingleCallSession.class) {
+      if (owner == null || !owner.equals(uuid) || setupReservations == 0) return;
+      setupReservations--;
+      shouldRelease = setupReservations == 0 && releasePending;
+    }
+    if (!shouldRelease) return;
+
+    ForkTelecomManager.cleanupTerminalCall(uuid);
+    if (!ForkTelecomManager.isTelecomAudioOwner(uuid)) releaseIfOwner(uuid);
   }
 
   static synchronized boolean hasSetupReservation(@NonNull UUID uuid) {
@@ -72,8 +82,13 @@ final class ForkSingleCallSession {
 
   static boolean releaseIfOwner(@NonNull UUID uuid) {
     synchronized (ForkSingleCallSession.class) {
-      if (owner == null || !owner.equals(uuid) || setupReservations > 0) return false;
+      if (owner == null || !owner.equals(uuid)) return false;
+      if (setupReservations > 0) {
+        releasePending = true;
+        return false;
+      }
       owner = null;
+      releasePending = false;
     }
     ForkCallLifecycleCoordinator.ownerReleased(uuid);
     return true;
@@ -92,6 +107,7 @@ final class ForkSingleCallSession {
           if (owner != null) continue;
           owner = incomingUuid;
           setupReservations = 1;
+          releasePending = false;
           return true;
         }
       }
@@ -176,6 +192,7 @@ final class ForkSingleCallSession {
       if (setupReservations > 0) return false;
       owner = replacement;
       setupReservations = 1;
+      releasePending = false;
       return true;
     }
   }

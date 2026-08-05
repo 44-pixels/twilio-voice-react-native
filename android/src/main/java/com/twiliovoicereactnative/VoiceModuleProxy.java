@@ -5,7 +5,6 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.google.firebase.messaging.FirebaseMessaging;
-import com.twilio.audioswitch.AudioDevice;
 import com.twilio.voice.Call;
 import com.twilio.voice.ConnectOptions;
 import com.twilio.voice.PreflightOptions;
@@ -23,14 +22,8 @@ class VoiceModuleProxy {
 
   private final ReactApplicationContext reactApplicationContext;
 
-  private final AudioSwitchManager audioSwitchManager;
-
-  public VoiceModuleProxy(
-    ReactApplicationContext reactApplicationContext,
-    AudioSwitchManager audioSwitchManager
-  ) {
+  public VoiceModuleProxy(ReactApplicationContext reactApplicationContext) {
     this.reactApplicationContext = reactApplicationContext;
-    this.audioSwitchManager = audioSwitchManager;
   }
 
   public void connect(
@@ -160,32 +153,14 @@ class VoiceModuleProxy {
   public void getAudioDevices(ModuleProxy.UniversalPromise promise) {
     logger.debug(".getAudioDevices()");
 
-    Map<String, AudioDevice> audioDevices = this.audioSwitchManager.getAudioDevices();
-    String selectedAudioDeviceUuid = this.audioSwitchManager.getSelectedAudioDeviceUuid();
-    AudioDevice selectedAudioDevice = this.audioSwitchManager.getSelectedAudioDevice();
-
-    WritableMap audioDeviceInfo = ReactNativeArgumentsSerializer.serializeAudioDeviceInfo(
-      audioDevices,
-      selectedAudioDeviceUuid,
-      selectedAudioDevice
-    );
-
-    promise.resolve(audioDeviceInfo);
+    promise.resolve(ForkTelecomManager.getAudioDevices());
   }
 
   public void selectAudioDevice(String uuid, ModuleProxy.UniversalPromise promise) {
     logger.debug(".selectAudioDevice()");
 
-    AudioDevice audioDevice = this.audioSwitchManager.getAudioDevices().get(uuid);
-    if (audioDevice == null) {
-      final String warningMsg = this.reactApplicationContext
-        .getString(R.string.missing_audiodevice_uuid, uuid);
-      promise.rejectWithName(CommonConstants.ErrorCodeInvalidArgumentError, warningMsg);
-      return;
-    }
-
     // >>> FORK KAR-443 — Core Telecom exclusively routes managed calls
-    boolean handledByTelecom = ForkCallLifecycleCoordinator.selectAudioDevice(audioDevice, routed -> {
+    int routeRequest = ForkTelecomManager.selectAudioDevice(uuid, routed -> {
       ForkTwilioVoiceThread.run(() -> {
         if (routed) {
           promise.resolve(null);
@@ -196,9 +171,14 @@ class VoiceModuleProxy {
         }
       });
     });
-    if (!handledByTelecom) {
-      this.audioSwitchManager.getAudioSwitch().selectDevice(audioDevice);
-      promise.resolve(null);
+    if (routeRequest == ForkCoreTelecomManager.ROUTE_UNKNOWN) {
+      final String warningMsg = this.reactApplicationContext
+        .getString(R.string.missing_audiodevice_uuid, uuid);
+      promise.rejectWithName(CommonConstants.ErrorCodeInvalidArgumentError, warningMsg);
+    } else if (routeRequest == ForkCoreTelecomManager.ROUTE_NOT_ACTIVE) {
+      promise.rejectWithName(
+        CommonConstants.ErrorCodeInvalidStateError,
+        "Core Telecom has no active call to route.");
     }
     // <<< FORK
   }

@@ -58,10 +58,6 @@ class CallListenerProxy implements Call.Listener {
 
     // stop sound
     getMediaPlayerManager().stop();
-    // >>> FORK KAR-443 — owner-aware routing cleanup runs via onDisconnected below
-    // Do not deactivate AudioSwitch until call ownership is known.
-    // <<< FORK
-
     // find call record & remove
     // >>> FORK KAR-685 — see ForkCallListenerRecordGuard.java
     CallRecord callRecord = ForkCallListenerRecordGuard.removeOrNull("onConnectFailure", uuid, call);
@@ -103,9 +99,6 @@ class CallListenerProxy implements Call.Listener {
     if (callRecord.getNotificationId() < 0) {
       callRecord.setNotificationId(NotificationUtility.createNotificationIdentifier());
     }
-    // <<< FORK
-    // >>> FORK KAR-443 — Core Telecom owns audio for registered outgoing calls
-    ForkCallLifecycleCoordinator.activateFallbackAudio(callRecord);
     // <<< FORK
     getMediaPlayerManager().play(MediaPlayerManager.SoundTable.RINGTONE);
     // >>> FORK KAR-443 — foreground failure terminates without early owner release
@@ -212,7 +205,7 @@ class CallListenerProxy implements Call.Listener {
     if (callRecord == null) return;
     // <<< FORK
     // stop audio & cancel notification
-    // >>> FORK KAR-443, KAR-787 — retain the call route through the call-ended sound
+    // >>> FORK KAR-443, KAR-787 — release Telecom audio before the call-ended sound
     ForkCallLifecycleCoordinator.twilioDisconnectedWithSound(context, callRecord, callException);
     // <<< FORK
 

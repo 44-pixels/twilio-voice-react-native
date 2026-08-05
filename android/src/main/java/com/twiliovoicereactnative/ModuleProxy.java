@@ -1,7 +1,6 @@
 package com.twiliovoicereactnative;
 
 import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.bridge.WritableMap;
 import com.twilio.voice.LogLevel;
 import com.twilio.voice.Voice;
 
@@ -35,25 +34,7 @@ class ModuleProxy {
     ForkPushTokenChanged.registerContext(reactApplicationContext);
     // <<< FORK
 
-    final AudioSwitchManager audioSwitchManager = VoiceApplicationProxy
-      .getAudioSwitchManager()
-      .setListener((audioDevices, selectedDeviceUuid, selectedDevice) -> {
-        WritableMap audioDeviceInfo = ReactNativeArgumentsSerializer.serializeAudioDeviceInfo(
-          audioDevices,
-          selectedDeviceUuid,
-          selectedDevice
-        );
-        audioDeviceInfo.putString(
-          CommonConstants.VoiceEventType,
-          CommonConstants.VoiceEventAudioDevicesUpdated
-        );
-        VoiceApplicationProxy.getJSEventEmitter().sendEvent(
-          CommonConstants.ScopeVoice,
-          audioDeviceInfo
-        );
-      });
-
-    this.voice = new VoiceModuleProxy(reactApplicationContext, audioSwitchManager);
+    this.voice = new VoiceModuleProxy(reactApplicationContext);
     this.call = new CallModuleProxy(reactApplicationContext);
     this.callInvite = new CallInviteModuleProxy(reactApplicationContext);
     this.preflightTest = new PreflightTestModuleProxy();

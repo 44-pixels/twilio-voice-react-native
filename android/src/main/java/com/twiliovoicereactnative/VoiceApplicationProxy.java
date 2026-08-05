@@ -21,7 +21,6 @@ public class VoiceApplicationProxy {
   private Application context = null;
   private final CallRecordDatabase callRecordDatabase = new CallRecordDatabase();
   private final PreflightTestRecordDatabase preflightTestRecordDatabase = new PreflightTestRecordDatabase();
-  private AudioSwitchManager audioSwitchManager;
   private MediaPlayerManager mediaPlayerManager;
   private JSEventEmitter jsEventEmitter;
   private VoiceService.VoiceServiceAPI voiceServiceApi = null;
@@ -75,17 +74,13 @@ public class VoiceApplicationProxy {
       new Intent(context, VoiceService.class),
       voiceServiceObserver,
       Context.BIND_AUTO_CREATE);
-    // Activate audio engine
-    audioSwitchManager = new AudioSwitchManager(context);
+    // Construct media manager. Core Telecom owns call audio routing.
     mediaPlayerManager = new MediaPlayerManager(context);
-    audioSwitchManager.start();
   }
   public void onTerminate() {
     logger.debug("onTerminate(..) invoked");
     // shutdown notificaiton channels
     NotificationUtility.destroyNotificationChannels(context);
-    // shutdown audioswitch & media manager
-    audioSwitchManager.stop();
     // verify that no call records are leaked
     for (CallRecord callRecord: callRecordDatabase.getCollection()) {
       logger.warning(
@@ -101,9 +96,6 @@ public class VoiceApplicationProxy {
   }
   static PreflightTestRecordDatabase getPreflightTestRecordDatabase() {
     return VoiceApplicationProxy.instance.preflightTestRecordDatabase;
-  }
-  static AudioSwitchManager getAudioSwitchManager() {
-    return VoiceApplicationProxy.instance.audioSwitchManager;
   }
   static MediaPlayerManager getMediaPlayerManager() {
     return VoiceApplicationProxy.instance.mediaPlayerManager;

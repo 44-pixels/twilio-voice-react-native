@@ -19,7 +19,7 @@
 // confirm VoiceIntentFilter.isVoiceAction is reachable (we widened it to
 // package-private); confirm VoiceService method names acceptCall / disconnect
 // / rejectCall / cancelCall; confirm ExpoActivityLifecycleListener still exposes
-// onCreate / onDestroy hooks. minSdk is 24, so Activity.setShowWhenLocked /
+// onCreate / onDestroy hooks. minSdk is 26, so Activity.setShowWhenLocked /
 // setTurnScreenOn (API 27+) cannot replace the addFlags / clearFlags path.
 
 package com.twiliovoicereactnative;

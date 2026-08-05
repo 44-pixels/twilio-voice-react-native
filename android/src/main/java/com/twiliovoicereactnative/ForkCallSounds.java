@@ -184,7 +184,7 @@ public final class ForkCallSounds {
     MediaPlayer player = createPlayer(
       context,
       resourceId,
-      AudioAttributes.USAGE_VOICE_COMMUNICATION,
+      AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
       false
     );
     if (player == null) {
